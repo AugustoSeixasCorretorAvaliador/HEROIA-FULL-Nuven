@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>HERO.IA Copiloto</title>
+  <link rel="stylesheet" href="assets/css/style.css" />
+</head>
+<body>
+  <main class="app">
+    <header>
+      <h1>HERO.IA Copiloto</h1>
+      <p>Analisa a conversa e sugere a melhor resposta.</p>
+    </header>
+
+    <section class="inputs">
+      <textarea id="messages" placeholder="Cole aqui as mensagens (autor: texto)" rows="8"></textarea>
+      <div class="actions">
+        <button id="btn-draft">✍️ HERO.IA Gerar Rascunho...</button>
+        <button id="btn-copilot">🧠 HERO.IA Copiloto/Follow-Up</button>
+        <button id="btn-clear">Limpar</button>
+      </div>
+    </section>
+
+    <section class="output">
+      <div class="panel">
+        <h3>🧠 HERO.IA Análise</h3>
+        <pre id="analysis"></pre>
+      </div>
+      <div class="panel">
+        <h3>Sugestão</h3>
+        <pre id="suggestion"></pre>
+        <div class="actions">
+          <button id="btn-copy">Copiar</button>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <script>
+    const API_BASE = "http://localhost:3002";
+    const messagesEl = document.getElementById("messages");
+    const analysisEl = document.getElementById("analysis");
+    const suggestionEl = document.getElementById("suggestion");
+    const btnCopilot = document.getElementById("btn-copilot");
+    const btnDraft = document.getElementById("btn-draft");
+    const btnCopy = document.getElementById("btn-copy");
+    const btnClear = document.getElementById("btn-clear");
+
+    function parseMessagesForCopilot(raw) {
+      return raw
+        .split(/\n+/)
+        .map((line) => line.trim())
+        .filter(Boolean)
+        .map((line) => {
+          if (line.includes(":")) {
+            const [author, ...rest] = line.split(":");
+            const text = rest.join(":").trim();
+            if (author && text) return { author: author.trim(), text };
+          }
+          return { author: "cliente", text: line };
+        });
+    }
+
+    function parseMessagesForDraft(raw) {
+      return raw
+        .split(/\n+/)
+        .map((line) => line.trim())
+        .filter(Boolean);
+    }
+
+    async function call(path, payload) {
+      const res = await fetch(`${API_BASE}${path}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      if (!res.ok) throw new Error(`API error ${res.status}`);
+      return res.json();
+    }
+
+    async function runCopilot() {
+      toggleLoading(true, btnCopilot);
+      try {
+        const messages = parseMessagesForCopilot(messagesEl.value);
+        if (!messages.length) {
+          alert("Cole mensagens do cliente antes de rodar o Copiloto.");
+          return;
+        }
+        const res = await call("/whatsapp/copilot", { messages });
+        const analysis = res.analysis || "";
+        analysisEl.textContent = analysis ? `${analysis}\n\n✍️ FollowUp sugerido GERADO 👉` : "";
+        suggestionEl.textContent = res.suggestion || res.draft || "";
+      } catch (err) {
+        analysisEl.textContent = "Erro ao rodar Copiloto";
+        console.error(err);
+      } finally {
+        toggleLoading(false, btnCopilot);
+      }
+    }
+
+    async function runDraft() {
+      toggleLoading(true, btnDraft);
+      try {
+        const mensagens = parseMessagesForDraft(messagesEl.value);
+        if (!mensagens.length) {
+          alert("Cole mensagens do cliente antes de gerar o rascunho.");
+          return;
+        }
+        const res = await call("/whatsapp/draft", { mensagens });
+        const analysis = res.analysis || "";
+        analysisEl.textContent = analysis ? `${analysis}\n\n✍️ FollowUp sugerido GERADO 👉` : "";
+        suggestionEl.textContent = res.suggestion || res.draft || "";
+      } catch (err) {
+        analysisEl.textContent = "Erro ao gerar rascunho";
+        console.error(err);
+      } finally {
+        toggleLoading(false, btnDraft);
+      }
+    }
+
+    function toggleLoading(isLoading, btn) {
+      if (!btn) return;
+      btn.disabled = isLoading;
+      btn.textContent = isLoading ? "Carregando..." : btn.dataset.label || btn.textContent;
+    }
+
+    btnCopilot.dataset.label = btnCopilot.textContent;
+    btnDraft.dataset.label = btnDraft.textContent;
+
+    btnCopilot.addEventListener("click", runCopilot);
+    btnDraft.addEventListener("click", runDraft);
+    btnCopy.addEventListener("click", () => {
+      const text = suggestionEl.textContent || "";
+      navigator.clipboard?.writeText(text).catch(() => {});
+    });
+    btnClear.addEventListener("click", () => {
+      messagesEl.value = "";
+      analysisEl.textContent = "";
+      suggestionEl.textContent = "";
+    });
+  </script>
+</body>
+</html>

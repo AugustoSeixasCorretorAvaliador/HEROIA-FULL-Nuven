@@ -1,0 +1,89 @@
+#heroia-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 6px 8px;
+  gap: 8px;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.heroia-btn-draft,
+.heroia-btn-copilot {
+  flex: 1;
+  max-width: 320px;
+  padding: 10px 14px;
+  border: none;
+  border-radius: 12px;
+  font-size: 14px;
+  font-weight: 600;
+  color: #fff;
+  cursor: pointer;
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.18);
+  transition: transform 0.15s ease, box-shadow 0.15s ease, opacity 0.2s ease;
+}
+
+.heroia-btn-draft {
+  background: #2563eb;
+}
+
+.heroia-btn-copilot {
+  background: #7c3aed;
+}
+
+.heroia-btn-draft:hover,
+.heroia-btn-copilot:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 12px 24px rgba(0, 0, 0, 0.22);
+}
+
+.heroia-btn-draft:active,
+.heroia-btn-copilot:active {
+  transform: translateY(0);
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.16);
+}
+
+.heroia-btn-draft[disabled],
+.heroia-btn-copilot[disabled] {
+  opacity: 0.65;
+  cursor: not-allowed;
+}
+
+#heroia-analysis-panel {
+  position: fixed;
+  bottom: 12px;
+  left: 12px;
+  width: 480px;
+  max-height: 360px;
+  background: rgba(124, 58, 237, 0.88);
+  color: #f8fafc;
+  border-radius: 14px;
+  box-shadow: 0 16px 40px rgba(0,0,0,0.28);
+  padding: 14px;
+  z-index: 9998;
+  display: none;
+  backdrop-filter: blur(8px);
+  border: 1px solid rgba(255,255,255,0.18);
+  box-sizing: border-box;
+}
+
+#heroia-analysis-panel h3 {
+  margin: 0 0 8px 0;
+  font-size: 15px;
+}
+
+#heroia-analysis-panel p {
+  margin: 0 0 10px 0;
+  white-space: pre-line;
+  line-height: 1.5;
+  font-size: 13px;
+}
+
+#heroia-analysis-panel button.dismiss {
+  background: transparent;
+  border: none;
+  color: #94a3b8;
+  cursor: pointer;
+  float: right;
+  font-size: 13px;
+}
