@@ -22,6 +22,11 @@ app.use(cors());
 app.use(express.json({ limit: '200kb' }));
 
 // Initialize OpenAI
+if (!process.env.OPENAI_API_KEY) {
+  console.error('ERROR: OPENAI_API_KEY environment variable is required');
+  process.exit(1);
+}
+
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY
 });
@@ -107,6 +112,10 @@ Crie uma resposta apropriada e até 3 sugestões de follow-up.`;
       temperature: 0.7
     });
     
+    if (!completion.choices || !completion.choices[0] || !completion.choices[0].message?.content) {
+      throw new Error('Invalid response from OpenAI API');
+    }
+    
     const aiResponse = completion.choices[0].message.content;
     
     // Parse response to extract draft and followups
@@ -161,30 +170,51 @@ Analise a mensagem do cliente e forneça:
       temperature: 0.7
     });
     
+    if (!completion.choices || !completion.choices[0] || !completion.choices[0].message?.content) {
+      throw new Error('Invalid response from OpenAI API');
+    }
+    
     const aiResponse = completion.choices[0].message.content;
     
     // Try to parse JSON response
     let result;
     try {
-      // Try to extract JSON from the response
-      const jsonMatch = aiResponse.match(/\{[\s\S]*\}/);
-      if (jsonMatch) {
-        result = JSON.parse(jsonMatch[0]);
+      // First try to parse the entire response as JSON
+      result = JSON.parse(aiResponse);
+      
+      // Validate required fields
+      if (!result.analysis || !result.suggestion || !result.draft) {
+        throw new Error('Missing required fields');
+      }
+    } catch (parseError) {
+      // Try to extract JSON from markdown code blocks or text
+      const jsonMatch = aiResponse.match(/```(?:json)?\s*(\{[\s\S]*?\})\s*```/) || 
+                       aiResponse.match(/(\{[\s\S]*"analysis"[\s\S]*"suggestion"[\s\S]*"draft"[\s\S]*\})/);
+      
+      if (jsonMatch && jsonMatch[1]) {
+        try {
+          result = JSON.parse(jsonMatch[1]);
+          
+          // Validate required fields
+          if (!result.analysis || !result.suggestion || !result.draft) {
+            throw new Error('Missing required fields');
+          }
+        } catch (e) {
+          // Final fallback
+          result = {
+            analysis: 'Cliente demonstrou interesse. Análise detalhada em andamento.',
+            suggestion: 'Responda de forma clara e objetiva, destacando os benefícios.',
+            draft: aiResponse
+          };
+        }
       } else {
-        // Fallback if AI doesn't return JSON
+        // Fallback if no JSON structure found
         result = {
-          analysis: 'Cliente demonstrou interesse nos empreendimentos.',
-          suggestion: 'Destaque os diferenciais e benefícios dos imóveis disponíveis.',
+          analysis: 'Cliente demonstrou interesse. Análise detalhada em andamento.',
+          suggestion: 'Responda de forma clara e objetiva, destacando os benefícios.',
           draft: aiResponse
         };
       }
-    } catch (parseError) {
-      // Fallback structure
-      result = {
-        analysis: 'Cliente demonstrou interesse. Análise detalhada em andamento.',
-        suggestion: 'Responda de forma clara e objetiva, destacando os benefícios.',
-        draft: aiResponse
-      };
     }
     
     // Apply signature to draft
