@@ -1,0 +1,12 @@
+{
+  "example-key-123": {
+    "active": true,
+    "user": "example_user",
+    "expires": "2025-12-31"
+  },
+  "another-key-456": {
+    "active": false,
+    "user": "inactive_user",
+    "expires": "2024-01-01"
+  }
+}
