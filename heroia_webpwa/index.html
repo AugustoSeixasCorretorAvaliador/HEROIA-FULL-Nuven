@@ -82,8 +82,9 @@
     async function runCopilot() {
       toggleLoading(true, btnCopilot);
       try {
-        const messages = parseMessagesForCopilot(messagesEl.value);
-        if (!messages.length) {
+        const messageText = messagesEl.value.trim();
+        const messages = parseMessagesForCopilot(messageText);
+        if (!messages.length || !messageText) {
           alert("Cole mensagens do cliente antes de rodar o Copiloto.");
           return;
         }
@@ -102,12 +103,12 @@
     async function runDraft() {
       toggleLoading(true, btnDraft);
       try {
-        const mensagens = parseMessagesForDraft(messagesEl.value);
-        if (!mensagens.length) {
+        const message = messagesEl.value.trim();
+        if (!message) {
           alert("Cole mensagens do cliente antes de gerar o rascunho.");
           return;
         }
-        const res = await call("/whatsapp/draft", { mensagens });
+        const res = await call("/whatsapp/draft", { message });
         const analysis = res.analysis || "";
         analysisEl.textContent = analysis ? `${analysis}\n\n✍️ FollowUp sugerido GERADO 👉` : "";
         suggestionEl.textContent = res.suggestion || res.draft || "";
