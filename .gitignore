@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # Dependencies
 node_modules/
 
@@ -33,3 +34,8 @@ Thumbs.db
 # Build output
 dist/
 build/
+=======
+.env
+node_modules/
+data/licenses.json
+>>>>>>> main

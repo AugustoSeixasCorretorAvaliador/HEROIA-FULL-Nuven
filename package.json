@@ -1,4 +1,5 @@
 {
+<<<<<<< HEAD
   "name": "heroia-full-backend",
   "version": "1.0.0",
   "description": "Backend para HEROIA-FULL - Sistema de geração de mensagens WhatsApp",
@@ -8,14 +9,35 @@
     "dev": "node server.js"
   },
   "keywords": ["whatsapp", "api", "backend"],
+=======
+  "name": "heroia-full-nuven",
+  "version": "1.0.0",
+  "description": "Node.js Express backend for WhatsApp endpoints with OpenAI integration",
+  "main": "server.js",
+  "type": "module",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "keywords": [
+    "express",
+    "openai",
+    "whatsapp"
+  ],
+>>>>>>> main
   "author": "",
   "license": "ISC",
   "dependencies": {
     "express": "^4.18.2",
+<<<<<<< HEAD
     "dotenv": "^16.3.1",
     "cors": "^2.8.5"
   },
   "engines": {
     "node": ">=14.0.0"
+=======
+    "cors": "^2.8.5",
+    "dotenv": "^16.3.1",
+    "openai": "^4.20.1"
+>>>>>>> main
   }
 }

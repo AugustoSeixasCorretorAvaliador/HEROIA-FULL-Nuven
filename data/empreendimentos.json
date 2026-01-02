@@ -1,0 +1,29 @@
+{
+  "empreendimentos": [
+    {
+      "id": "1",
+      "nome": "Residencial Vista Alegre",
+      "descricao": "Apartamentos modernos com 2 e 3 quartos",
+      "localizacao": "Centro",
+      "preco_inicial": 350000,
+      "caracteristicas": [
+        "Piscina",
+        "Academia",
+        "Salão de festas",
+        "Playground"
+      ]
+    },
+    {
+      "id": "2",
+      "nome": "Condomínio Jardim das Flores",
+      "descricao": "Casas em condomínio fechado",
+      "localizacao": "Zona Sul",
+      "preco_inicial": 550000,
+      "caracteristicas": [
+        "Área verde",
+        "Segurança 24h",
+        "Quadra poliesportiva"
+      ]
+    }
+  ]
+}
