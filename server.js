@@ -2,7 +2,7 @@ import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
 import OpenAI from 'openai';
-import { readFileSync } from 'fs';
+import { readFileSync, writeFileSync, existsSync } from 'fs';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 
@@ -49,6 +49,16 @@ try {
   licenses = JSON.parse(licensesData);
 } catch (error) {
   console.warn('Could not load licenses.json:', error.message);
+  try {
+    if (!existsSync(join(__dirname, 'data'))) {
+      console.warn('Data directory not found; skipping licenses.json creation');
+    } else {
+      writeFileSync(join(__dirname, 'data', 'licenses.json'), '{}', 'utf-8');
+      console.info('Created empty data/licenses.json');
+    }
+  } catch (writeErr) {
+    console.warn('Unable to create licenses.json:', writeErr.message);
+  }
 }
 
 // License validation middleware
