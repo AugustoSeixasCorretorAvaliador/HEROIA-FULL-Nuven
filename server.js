@@ -1,89 +1,8 @@
 <<<<<<< HEAD
+<<<<<<< HEAD
 require('dotenv').config();
 const express = require('express');
-const cors = require('cors');
-
-
-=======
-import express from 'express';
-import cors from 'cors';
-import dotenv from 'dotenv';
-import OpenAI from 'openai';
-import { readFileSync, writeFileSync, existsSync } from 'fs';
-import { fileURLToPath } from 'url';
-import { dirname, join } from 'path';
-
-// Load environment variables
-dotenv.config();
-
-// Get directory path for ESM
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
-
-// Initialize Express app
->>>>>>> main
-const app = express();
-const PORT = process.env.PORT || 3000;
-
-// Middleware
-app.use(cors());
-<<<<<<< HEAD
-app.use(express.json());
-
-// Health check endpoint
-app.get('/', (req, res) => {
-  res.json({ 
-    status: 'ok', 
-    message: 'HEROIA-FULL Backend API',
-    endpoints: {
-      draft: 'POST /whatsapp/draft',
-      copilot: 'POST /whatsapp/copilot'
-    }
-  });
-});
-
-// Endpoint para Draft - gera mensagem de rascunho
-app.post('/whatsapp/draft', (req, res) => {
-  try {
-    const { propertyData, context } = req.body;
-    
-    // Log da requisição para debug
-    console.log('Draft request received:', { propertyData, context });
-    
-    // Validação básica
-    if (!propertyData) {
-      return res.status(400).json({ 
-        error: 'propertyData é obrigatório' 
-      });
-    }
-
-    // Por enquanto, retorna uma resposta de sucesso
-    // A lógica de negócio real será implementada posteriormente
-    res.json({
-      success: true,
-      message: 'Draft processado com sucesso',
-      data: {
-        type: 'draft',
-        propertyData,
-        context,
-        timestamp: new Date().toISOString()
-      }
-    });
-  } catch (error) {
-    console.error('Erro no endpoint /whatsapp/draft:', error);
-    res.status(500).json({ 
-      error: 'Erro ao processar draft',
-      message: error.message 
-    });
-  }
-});
-
-// Endpoint para Copilot - gera mensagem com assistência IA
-app.post('/whatsapp/copilot', (req, res) => {
-  try {
-    const { propertyData, context, prompt } = req.body;
-    
-    // Log da requisição para debug
+import "./backend/server.js";
     console.log('Copilot request received:', { propertyData, context, prompt });
     
     // Validação básica
@@ -374,3 +293,6 @@ app.listen(PORT, () => {
   console.log(`Append Signature: ${process.env.APPEND_SIGNATURE === 'true'}`);
 });
 >>>>>>> main
+=======
+import './backend/server.js';
+>>>>>>> 0c8f4a3 (Fix merge conflicts in root files)
