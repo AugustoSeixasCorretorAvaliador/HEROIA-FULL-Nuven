@@ -1,7 +1,7 @@
 // HERO.IA unified extension (Draft + Copiloto) for WhatsApp Web
 // Endpoints: /whatsapp/draft (rascunho) and /whatsapp/copilot (análise + sugestão)
 
-const API_BASE = "http://localhost:3002";
+const API_BASE = "https://heroia-full-nuven-1.onrender.com";
 const BTN_ID_DRAFT = "heroia-draft-btn";
 const BTN_ID_COPILOT = "heroia-copilot-btn";
 const PANEL_ID = "heroia-analysis-panel";

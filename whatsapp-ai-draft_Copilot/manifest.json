@@ -18,7 +18,10 @@
     "default_title": "HERO.IA"
   },
   "permissions": ["scripting", "clipboardWrite"],
-  "host_permissions": ["http://localhost/*"],
+  "host_permissions": [
+    "http://localhost/*",
+    "https://heroia-full-nuven-1.onrender.com/*"
+  ],
   "content_scripts": [
     {
       "matches": ["https://web.whatsapp.com/*"],
