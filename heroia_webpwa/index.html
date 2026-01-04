@@ -127,7 +127,13 @@
     function toggleLoading(isLoading, btn) {
       if (!btn) return;
       btn.disabled = isLoading;
-      btn.textContent = isLoading ? "Carregando..." : btn.dataset.label || btn.textContent;
+      if (isLoading) {
+        if (btn.id === "btn-draft") btn.textContent = "✍️ HERO.IA - Gerando...";
+        else if (btn.id === "btn-copilot") btn.textContent = "🧠 HERO.IA - Analisando...";
+        else btn.textContent = "Carregando...";
+      } else {
+        btn.textContent = btn.dataset.label || btn.textContent;
+      }
     }
 
     btnCopilot.dataset.label = btnCopilot.textContent;
