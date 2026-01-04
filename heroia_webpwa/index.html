@@ -15,7 +15,37 @@
     <header>
       <h1>HERO.IA </h1>
       <p>Analisa a conversa e sugere a melhor resposta.</p>
+      <div class="license-pill" id="license-pill">Licença não validada</div>
     </header>
+
+    <section class="license-card">
+      <div class="license-head">
+        <div>
+          <p class="eyebrow">Ativação obrigatória</p>
+          <h2>Valide sua licença</h2>
+          <p class="muted">Informe a licença e e-mail. O backend valida tudo direto no Supabase.</p>
+        </div>
+        <div class="device-box">
+          <span>ID do dispositivo</span>
+          <code id="device-id"></code>
+          <button class="ghost" id="copy-device" type="button">Copiar</button>
+        </div>
+      </div>
+      <form id="license-form" class="license-form">
+        <label>
+          <span>License key</span>
+          <input id="license-key" name="license_key" placeholder="LIC-XXXX-XXXX" required />
+        </label>
+        <label>
+          <span>E-mail</span>
+          <input id="license-email" name="email" type="email" placeholder="voce@empresa.com" required />
+        </label>
+        <div class="license-actions">
+          <button id="btn-activate" type="submit">Ativar / Validar licença</button>
+          <p id="license-status" class="status muted">Informe os dados e ative para liberar o uso.</p>
+        </div>
+      </form>
+    </section>
 
     <section class="inputs">
       <textarea id="messages" placeholder="Cole aqui as mensagens (autor: texto)" rows="8"></textarea>
@@ -43,7 +73,9 @@
 
   <script>
     const API_BASE = "https://heroia-full-nuven-1.onrender.com";
-    const USER_KEY = localStorage.getItem("heroiaUserKey") || ""; // defina sua licença aqui ou via localStorage
+    const DEVICE_ID_KEY = "heroia_device_id";
+    const ACTIVATION_KEY = "heroia_activation_v2";
+
     const messagesEl = document.getElementById("messages");
     const analysisEl = document.getElementById("analysis");
     const suggestionEl = document.getElementById("suggestion");
@@ -51,6 +83,116 @@
     const btnDraft = document.getElementById("btn-draft");
     const btnCopy = document.getElementById("btn-copy");
     const btnClear = document.getElementById("btn-clear");
+
+    const deviceIdEl = document.getElementById("device-id");
+    const copyDeviceBtn = document.getElementById("copy-device");
+    const licenseForm = document.getElementById("license-form");
+    const licenseKeyInput = document.getElementById("license-key");
+    const licenseEmailInput = document.getElementById("license-email");
+    const licenseStatusEl = document.getElementById("license-status");
+    const licensePill = document.getElementById("license-pill");
+    const btnActivate = document.getElementById("btn-activate");
+
+    function generateDeviceId() {
+      if (crypto?.randomUUID) return crypto.randomUUID();
+      return `dev-${Date.now()}-${Math.random().toString(16).slice(2, 10)}`;
+    }
+
+    function getDeviceId() {
+      const existing = localStorage.getItem(DEVICE_ID_KEY);
+      if (existing) return existing;
+      const created = generateDeviceId();
+      localStorage.setItem(DEVICE_ID_KEY, created);
+      return created;
+    }
+
+    const DEVICE_ID = getDeviceId();
+    deviceIdEl.textContent = DEVICE_ID;
+
+    function loadActivation() {
+      try {
+        const raw = localStorage.getItem(ACTIVATION_KEY);
+        return raw ? JSON.parse(raw) : null;
+      } catch (err) {
+        console.warn("Falha ao ler ativação local", err);
+        return null;
+      }
+    }
+
+    function saveActivation(data) {
+      localStorage.setItem(ACTIVATION_KEY, JSON.stringify(data));
+    }
+
+    function renderActivation(state, message) {
+      const status = state?.status || "pending";
+      const expires = state?.expires_at || state?.expiresAt || null;
+
+      let text = "Licença não validada";
+      let pillClass = "license-pill";
+      if (status === "active") {
+        text = "Licença válida" + (expires ? ` • expira em ${new Date(expires).toLocaleDateString()}` : "");
+        pillClass += " success";
+      } else if (status === "blocked") {
+        text = "Licença bloqueada";
+        pillClass += " danger";
+      } else if (status === "error") {
+        text = "Erro de licença";
+        pillClass += " danger";
+      }
+
+      licensePill.textContent = text;
+      licensePill.className = pillClass;
+      licenseStatusEl.textContent = message || text;
+    }
+
+    function requireActiveLicense() {
+      const state = loadActivation();
+      if (!state || state.status !== "active") {
+        throw new Error("Ative sua licença para usar o HERO.IA.");
+      }
+      return state;
+    }
+
+    async function activateLicense(event) {
+      event.preventDefault();
+      const license_key = licenseKeyInput.value.trim();
+      const email = licenseEmailInput.value.trim();
+      if (!license_key || !email) {
+        renderActivation({ status: "error" }, "Preencha license key e e-mail.");
+        return;
+      }
+
+      btnActivate.disabled = true;
+      const originalLabel = btnActivate.textContent;
+      btnActivate.textContent = "Validando...";
+
+      try {
+        const res = await fetch(`${API_BASE}/api/license/activate`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ license_key, email, device_id: DEVICE_ID })
+        });
+
+        const payload = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(payload.error || `Erro ${res.status}`);
+
+        const state = {
+          license_key,
+          email,
+          device_id: DEVICE_ID,
+          status: payload.status,
+          expires_at: payload.expires_at || null
+        };
+        saveActivation(state);
+        renderActivation(state, "Licença ativada neste dispositivo.");
+      } catch (err) {
+        console.error("Ativação falhou", err);
+        renderActivation({ status: "error" }, err.message || "Erro ao ativar");
+      } finally {
+        btnActivate.disabled = false;
+        btnActivate.textContent = originalLabel;
+      }
+    }
 
     function parseMessagesForCopilot(raw) {
       return raw
@@ -75,25 +217,26 @@
     }
 
     async function call(path, payload) {
+      const activation = requireActiveLicense();
       const res = await fetch(`${API_BASE}${path}`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "x-user-key": USER_KEY || ""
+          "x-license-key": activation.license_key,
+          "x-device-id": activation.device_id || DEVICE_ID
         },
-        body: JSON.stringify(payload),
+        body: JSON.stringify(payload)
       });
-      if (res.status === 403) {
-        alert("Licença inválida ou ausente. Configure sua chave e tente novamente.");
-        throw new Error("Licença inválida ou ausente");
-      }
-      if (!res.ok) throw new Error(`API error ${res.status}`);
-      return res.json();
+
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(body.error || `API error ${res.status}`);
+      return body;
     }
 
     async function runCopilot() {
       toggleLoading(true, btnCopilot);
       try {
+        requireActiveLicense();
         const messageText = messagesEl.value.trim();
         const messages = parseMessagesForCopilot(messageText);
         if (!messages.length || !messageText) {
@@ -106,6 +249,7 @@
         suggestionEl.textContent = res.suggestion || res.draft || "";
       } catch (err) {
         analysisEl.textContent = "Erro ao rodar Copiloto";
+        renderActivation({ status: "error" }, err.message);
         console.error(err);
       } finally {
         toggleLoading(false, btnCopilot);
@@ -115,6 +259,7 @@
     async function runDraft() {
       toggleLoading(true, btnDraft);
       try {
+        requireActiveLicense();
         const message = messagesEl.value.trim();
         if (!message) {
           alert("Cole mensagens do cliente antes de gerar o rascunho.");
@@ -126,6 +271,7 @@
         suggestionEl.textContent = res.suggestion || res.draft || "";
       } catch (err) {
         analysisEl.textContent = "Erro ao gerar rascunho";
+        renderActivation({ status: "error" }, err.message);
         console.error(err);
       } finally {
         toggleLoading(false, btnDraft);
@@ -146,6 +292,24 @@
 
     btnCopilot.dataset.label = btnCopilot.textContent;
     btnDraft.dataset.label = btnDraft.textContent;
+
+    const existing = loadActivation();
+    if (existing) {
+      licenseKeyInput.value = existing.license_key || "";
+      licenseEmailInput.value = existing.email || "";
+      if (!existing.device_id) {
+        const updated = { ...existing, device_id: DEVICE_ID };
+        saveActivation(updated);
+      }
+      renderActivation(existing);
+    }
+
+    licenseForm.addEventListener("submit", activateLicense);
+    copyDeviceBtn.addEventListener("click", () => {
+      navigator.clipboard?.writeText(DEVICE_ID).then(() => {
+        renderActivation(loadActivation(), "Device ID copiado.");
+      }).catch(() => renderActivation(loadActivation(), "Copie manualmente: " + DEVICE_ID));
+    });
 
     btnCopilot.addEventListener("click", runCopilot);
     btnDraft.addEventListener("click", runDraft);
