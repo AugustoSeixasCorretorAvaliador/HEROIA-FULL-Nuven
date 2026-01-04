@@ -15,83 +15,42 @@ cp .env.example .env
 2. Configure as variáveis de ambiente no arquivo `.env`:
 - `OPENAI_API_KEY`: Sua chave da API OpenAI
 - `OPENAI_MODEL`: Modelo OpenAI a usar (padrão: gpt-4o-mini)
-- `APP_REQUIRE_LICENSE`: Define se validação de licença é obrigatória (true/false)
+- `SUPABASE_URL`: URL do projeto Supabase
+- `SUPABASE_SERVICE_ROLE_KEY`: Service role key do Supabase (usada apenas no backend)
+- `APP_REQUIRE_LICENSE`: Define se validação de licença é obrigatória (padrão: true)
 - `APPEND_SIGNATURE`: Define se deve adicionar assinatura às respostas (true/false)
 - `SIGNATURE`: Texto da assinatura a ser adicionado
-3. (Opcional) Configure licenças em `data/licenses.json` se `APP_REQUIRE_LICENSE=true`
+3. Licenciamento agora é centralizado no Supabase. Nenhum arquivo JSON local é usado para licenças.
 ## Execução
 ```bash
 node server.js
 ```
 O servidor iniciará na porta 3000 (ou `PORT` definida no `.env`).
 ## Endpoints
+### POST /api/license/activate
+Ativa ou valida uma licença centralizada no Supabase.
+- Body: `{ "license_key": "...", "email": "...", "device_id": "..." }`
+- Respostas possíveis:
+  - 200 `{ "status": "active", "expires_at": "2026-01-04T00:00:00.000Z" }`
+  - 403/404 com `{ error: "motivo" }`
+
 ### POST /whatsapp/draft
 Gera um rascunho de resposta para mensagem do WhatsApp.
-**Headers (se APP_REQUIRE_LICENSE=true):**
-- `x-user-key`: Chave de licença do usuário
-**Body:**
-```json
-{
-  "message": "Mensagem do cliente",
-  "context": "Contexto adicional (opcional)"
-}
-```
-**Resposta:**
-```json
-{
-  "draft": "Rascunho de resposta",
-  "followups": ["Pergunta 1", "Pergunta 2", "Pergunta 3"]
-}
-```
+- Headers obrigatórios (se `APP_REQUIRE_LICENSE=true`):
+  - `x-license-key`: chave de licença
+  - `x-device-id`: device_id vinculado
+- Body: `{ "message": "Mensagem do cliente" }` ou `{ "mensagens": ["msg1", "msg2"] }`
+- Resposta: `{ "draft": "...", "followups": ["..."], "raw": {} }`
+
 ### POST /whatsapp/copilot
 Analisa mensagem e fornece análise, sugestão e rascunho.
-**Headers (se APP_REQUIRE_LICENSE=true):**
-- `x-user-key`: Chave de licença do usuário
-**Body:**
-```json
-{
-  "message": "Mensagem do cliente",
-  "context": "Contexto adicional (opcional)",
-  "conversation": "Histórico da conversa (opcional)"
-}
-```
-**Resposta:**
-```json
-{
-  "analysis": "Análise do interesse do cliente",
-  "suggestion": "Sugestão de abordagem",
-  "draft": "Rascunho de resposta"
-}
-```
+- Headers obrigatórios (se `APP_REQUIRE_LICENSE=true`): `x-license-key`, `x-device-id`
+- Body: `{ "messages": [{ "author": "cliente", "text": "..." }] }`
+- Resposta: `{ "analysis": "...", "suggestion": "...", "draft": "..." }`
+
 ### GET /health
 Verifica status do servidor.
-**Resposta:**
-```json
-{
-  "status": "ok",
-  "message": "HEROIA-FULL Backend API",
-  "endpoints": {
-    "draft": "POST /whatsapp/draft",
-    "copilot": "POST /whatsapp/copilot"
-  }
-}
-```
-```
-
-**Resposta:**
-```json
-{
-  "success": true,
-  "message": "Copilot processado com sucesso",
-  "data": {
-    "type": "copilot",
-    "propertyData": { ... },
-    "context": "locacao",
-    "prompt": "Criar mensagem persuasiva",
-    "timestamp": "2026-01-01T22:00:00.000Z"
-  }
-}
-```
+- Resposta: `{ "ok": true, "license": true }`
 
 ## 🌐 Deploy no Render
 
@@ -112,18 +71,22 @@ Verifica status do servidor.
 A extensão de navegador deve fazer requisições POST para os endpoints:
 
 ```javascript
-// Botão Draft
+const headers = {
+  'Content-Type': 'application/json',
+  'x-license-key': activation.license_key,
+  'x-device-id': activation.device_id
+};
+
 fetch('https://seu-app.render.com/whatsapp/draft', {
   method: 'POST',
-  headers: { 'Content-Type': 'application/json' },
-  body: JSON.stringify({ propertyData, context })
+  headers,
+  body: JSON.stringify({ message })
 });
 
-// Botão Copilot
 fetch('https://seu-app.render.com/whatsapp/copilot', {
   method: 'POST',
-  headers: { 'Content-Type': 'application/json' },
-  body: JSON.stringify({ propertyData, context, prompt })
+  headers,
+  body: JSON.stringify({ messages })
 });
 ```
 
@@ -145,20 +108,5 @@ fetch('https://seu-app.render.com/whatsapp/copilot', {
 
 - `backend/server.js`: Servidor Express principal
 - `backend/data/empreendimentos.json`: Dados dos empreendimentos
-- `backend/data/licenses.json`: Licenças (não versionado)
 - `.env`: Variáveis de ambiente (não versionado)
 - `.env.example`: Exemplo de configuração
-
-## Licenciamento
-
-Validação opcional via header `x-user-key` se `APP_REQUIRE_LICENSE=true`. Exemplo de `data/licenses.json`:
-
-```json
-{
-  "license-key-123": {
-    "active": true,
-    "user": "username",
-    "expires": "2025-12-31"
-  }
-}
-```
