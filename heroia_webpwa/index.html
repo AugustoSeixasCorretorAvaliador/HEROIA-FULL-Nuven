@@ -43,6 +43,7 @@
 
   <script>
     const API_BASE = "https://heroia-full-nuven-1.onrender.com";
+    const USER_KEY = localStorage.getItem("heroiaUserKey") || ""; // defina sua licença aqui ou via localStorage
     const messagesEl = document.getElementById("messages");
     const analysisEl = document.getElementById("analysis");
     const suggestionEl = document.getElementById("suggestion");
@@ -76,9 +77,16 @@
     async function call(path, payload) {
       const res = await fetch(`${API_BASE}${path}`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          "x-user-key": USER_KEY || ""
+        },
         body: JSON.stringify(payload),
       });
+      if (res.status === 403) {
+        alert("Licença inválida ou ausente. Configure sua chave e tente novamente.");
+        throw new Error("Licença inválida ou ausente");
+      }
       if (!res.ok) throw new Error(`API error ${res.status}`);
       return res.json();
     }
