@@ -15,6 +15,9 @@ on:
 jobs:
   generate:
     runs-on: ubuntu-latest
+    env:
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      NODE_OPTIONS: --dns-result-order=ipv4first
 
     steps:
       - name: Checkout repository
@@ -26,17 +29,10 @@ jobs:
           node-version: "20"
 
       - name: Install dependencies
-        run: npm install pg
+        run: npm ci
 
       - name: Generate licenses
+        run: node scripts/generate-licenses.js
         env:
-          DATABASE_URL: ${{ secrets.DATABASE_URL }}
           LICENSE_COUNT: ${{ github.event.inputs.count }}
           LICENSE_NOTES: ${{ github.event.inputs.notes }}
-        run: node scripts/generate-licenses.js
-
-      - name: Upload CSV artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: licenses-csv
-          path: licenses.csv
