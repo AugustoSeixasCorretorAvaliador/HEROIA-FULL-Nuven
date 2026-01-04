@@ -2,7 +2,8 @@
 // Endpoints: /whatsapp/draft (rascunho) and /whatsapp/copilot (análise + sugestão)
 
 const API_BASE = "https://heroia-full-nuven-1.onrender.com";
-const USER_KEY = localStorage.getItem("heroiaUserKey") || ""; // defina sua licença aqui ou via localStorage
+const STORAGE_ACTIVATION = "heroia_activation_v2";
+const STORAGE_DEVICE = "heroia_device_id";
 const BTN_ID_DRAFT = "heroia-draft-btn";
 const BTN_ID_COPILOT = "heroia-copilot-btn";
 const PANEL_ID = "heroia-analysis-panel";
@@ -101,21 +102,76 @@ function insertTextInComposer(text) {
   return true;
 }
 
+function generateDeviceId() {
+  if (crypto?.randomUUID) return crypto.randomUUID();
+  return `dev-${Date.now()}-${Math.random().toString(16).slice(2, 10)}`;
+}
+
+async function getDeviceId() {
+  const stored = await chrome.storage.local.get(STORAGE_DEVICE);
+  if (stored?.[STORAGE_DEVICE]) return stored[STORAGE_DEVICE];
+  const id = generateDeviceId();
+  await chrome.storage.local.set({ [STORAGE_DEVICE]: id });
+  return id;
+}
+
+async function activateRemote(payload) {
+  const res = await fetch(`${API_BASE}/api/license/activate`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload)
+  });
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(body.error || `Erro ${res.status}`);
+  return body;
+}
+
+async function ensureLicenseActive() {
+  const deviceId = await getDeviceId();
+  const stored = await chrome.storage.local.get(STORAGE_ACTIVATION);
+  const activation = stored?.[STORAGE_ACTIVATION];
+
+  if (activation?.license_key && activation?.email) {
+    // Revalida no backend para garantir status centralizado
+    const payload = await activateRemote({ license_key: activation.license_key, email: activation.email, device_id: deviceId });
+    await chrome.storage.local.set({
+      [STORAGE_ACTIVATION]: { ...activation, device_id: deviceId, status: payload.status, expires_at: payload.expires_at || null }
+    });
+    return { licenseKey: activation.license_key, deviceId };
+  }
+
+  const licenseKey = prompt("Informe sua license key HERO.IA");
+  if (!licenseKey) throw new Error("Licença não informada.");
+  const email = prompt("Informe o e-mail vinculado à licença");
+  if (!email) throw new Error("E-mail é obrigatório para ativar a licença.");
+
+  const payload = await activateRemote({ license_key: licenseKey.trim(), email: email.trim(), device_id: deviceId });
+  await chrome.storage.local.set({
+    [STORAGE_ACTIVATION]: {
+      license_key: licenseKey.trim(),
+      email: email.trim(),
+      device_id: deviceId,
+      status: payload.status,
+      expires_at: payload.expires_at || null
+    }
+  });
+  return { licenseKey: licenseKey.trim(), deviceId };
+}
+
 async function callBackend(path, payload) {
+  const { licenseKey, deviceId } = await ensureLicenseActive();
   const res = await fetch(`${API_BASE}${path}`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      "x-user-key": USER_KEY || ""
+      "x-license-key": licenseKey,
+      "x-device-id": deviceId
     },
     body: JSON.stringify(payload),
   });
-  if (res.status === 403) {
-    alert("Licença inválida ou ausente. Configure sua chave e tente novamente.");
-    throw new Error("Licença inválida ou ausente");
-  }
-  if (!res.ok) throw new Error(`API error ${res.status}`);
-  return res.json();
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(body.error || `API error ${res.status}`);
+  return body;
 }
 
 function createPanel() {
@@ -200,7 +256,7 @@ async function handleDraftClick() {
     }
   } catch (err) {
     console.error("HERO.IA draft error", err);
-    alert("Erro ao gerar rascunho.");
+    alert(err?.message || "Erro ao gerar rascunho.");
   } finally {
     setLoading("loadingDraft", false);
   }
@@ -227,7 +283,7 @@ async function handleCopilotClick() {
     }
   } catch (err) {
     console.error("HERO.IA copiloto error", err);
-    alert("Erro ao rodar Copiloto.");
+    alert(err?.message || "Erro ao rodar Copiloto.");
   } finally {
     setLoading("loadingCopilot", false);
   }
