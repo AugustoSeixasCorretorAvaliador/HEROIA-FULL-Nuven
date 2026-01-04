@@ -464,7 +464,7 @@ function shouldAppendSignature({ mode, userText, aiText }) {
 // ===============================
 app.get("/health", (_req, res) => res.json({ ok: true }));
 
-app.post("/whatsapp/copilot", async (req, res) => {
+app.post("/whatsapp/copilot", licenseMiddleware, async (req, res) => {
   try {
     const normalized = normalizeCopilotMessages(req.body?.messages);
     if (!normalized.length) return res.status(400).json({ error: "Mensagens inválidas." });
