@@ -19,6 +19,7 @@ function createButton(id, label, className, onClick) {
   btn.id = id;
   btn.className = className;
   btn.textContent = label;
+   btn.dataset.label = label;
   btn.addEventListener("click", onClick);
   return btn;
 }
@@ -162,8 +163,14 @@ function setLoading(mode, isLoading) {
   state[mode] = isLoading;
   const btnDraft = document.getElementById(BTN_ID_DRAFT);
   const btnCopilot = document.getElementById(BTN_ID_COPILOT);
-  if (mode === "loadingDraft" && btnDraft) btnDraft.disabled = isLoading;
-  if (mode === "loadingCopilot" && btnCopilot) btnCopilot.disabled = isLoading;
+  if (mode === "loadingDraft" && btnDraft) {
+    btnDraft.disabled = isLoading;
+    btnDraft.textContent = isLoading ? "✍️ HERO.IA - Gerando..." : (btnDraft.dataset.label || "✍️ HERO.IA Gerar Rascunho...");
+  }
+  if (mode === "loadingCopilot" && btnCopilot) {
+    btnCopilot.disabled = isLoading;
+    btnCopilot.textContent = isLoading ? "🧠 HERO.IA - Analisando..." : (btnCopilot.dataset.label || "🧠 HERO.IA Copiloto/Follow-Up");
+  }
 }
 
 async function handleDraftClick() {
