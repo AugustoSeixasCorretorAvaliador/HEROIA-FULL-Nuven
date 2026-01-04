@@ -2,6 +2,7 @@
 // Endpoints: /whatsapp/draft (rascunho) and /whatsapp/copilot (análise + sugestão)
 
 const API_BASE = "https://heroia-full-nuven-1.onrender.com";
+const USER_KEY = localStorage.getItem("heroiaUserKey") || ""; // defina sua licença aqui ou via localStorage
 const BTN_ID_DRAFT = "heroia-draft-btn";
 const BTN_ID_COPILOT = "heroia-copilot-btn";
 const PANEL_ID = "heroia-analysis-panel";
@@ -103,9 +104,16 @@ function insertTextInComposer(text) {
 async function callBackend(path, payload) {
   const res = await fetch(`${API_BASE}${path}`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: {
+      "Content-Type": "application/json",
+      "x-user-key": USER_KEY || ""
+    },
     body: JSON.stringify(payload),
   });
+  if (res.status === 403) {
+    alert("Licença inválida ou ausente. Configure sua chave e tente novamente.");
+    throw new Error("Licença inválida ou ausente");
+  }
   if (!res.ok) throw new Error(`API error ${res.status}`);
   return res.json();
 }
