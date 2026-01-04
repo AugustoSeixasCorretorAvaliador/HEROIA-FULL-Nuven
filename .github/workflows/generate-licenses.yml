@@ -1,0 +1,42 @@
+name: Generate Licenses (Supabase)
+
+on:
+  workflow_dispatch:
+    inputs:
+      count:
+        description: "Quantidade de licenças a gerar"
+        required: false
+        default: "500"
+      notes:
+        description: "Notas associadas às licenças"
+        required: false
+        default: "estoque Hotmart"
+
+jobs:
+  generate:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install dependencies
+        run: npm install pg
+
+      - name: Generate licenses
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          LICENSE_COUNT: ${{ github.event.inputs.count }}
+          LICENSE_NOTES: ${{ github.event.inputs.notes }}
+        run: node scripts/generate-licenses.js
+
+      - name: Upload CSV artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: licenses-csv
+          path: licenses.csv
