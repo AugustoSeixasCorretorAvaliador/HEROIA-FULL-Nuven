@@ -107,11 +107,26 @@ function generateDeviceId() {
   return `dev-${Date.now()}-${Math.random().toString(16).slice(2, 10)}`;
 }
 
+function getStorage() {
+  if (typeof chrome !== "undefined" && chrome?.storage?.local) return chrome.storage.local;
+  // Fallback para rodar via tamper/console: usa localStorage
+  return {
+    async get(key) {
+      const raw = localStorage.getItem(key);
+      return raw ? { [key]: JSON.parse(raw) } : {};
+    },
+    async set(obj) {
+      Object.entries(obj || {}).forEach(([k, v]) => localStorage.setItem(k, JSON.stringify(v)));
+    }
+  };
+}
+
 async function getDeviceId() {
-  const stored = await chrome.storage.local.get(STORAGE_DEVICE);
+  const storage = getStorage();
+  const stored = await storage.get(STORAGE_DEVICE);
   if (stored?.[STORAGE_DEVICE]) return stored[STORAGE_DEVICE];
   const id = generateDeviceId();
-  await chrome.storage.local.set({ [STORAGE_DEVICE]: id });
+  await storage.set({ [STORAGE_DEVICE]: id });
   return id;
 }
 
@@ -128,25 +143,34 @@ async function activateRemote(payload) {
 
 async function ensureLicenseActive() {
   const deviceId = await getDeviceId();
-  const stored = await chrome.storage.local.get(STORAGE_ACTIVATION);
+  const storage = getStorage();
+  const stored = await storage.get(STORAGE_ACTIVATION);
   const activation = stored?.[STORAGE_ACTIVATION];
 
   if (activation?.license_key && activation?.email) {
     // Revalida no backend para garantir status centralizado
     const payload = await activateRemote({ license_key: activation.license_key, email: activation.email, device_id: deviceId });
-    await chrome.storage.local.set({
+    await storage.set({
       [STORAGE_ACTIVATION]: { ...activation, device_id: deviceId, status: payload.status, expires_at: payload.expires_at || null }
     });
     return { licenseKey: activation.license_key, deviceId };
   }
 
   const licenseKey = prompt("Informe sua license key HERO.IA");
-  if (!licenseKey) throw new Error("Licença não informada.");
+  if (!licenseKey) {
+    const err = new Error("Licença não informada.");
+    err.code = "LICENSE_CANCELLED";
+    throw err;
+  }
   const email = prompt("Informe o e-mail vinculado à licença");
-  if (!email) throw new Error("E-mail é obrigatório para ativar a licença.");
+  if (!email) {
+    const err = new Error("E-mail é obrigatório para ativar a licença.");
+    err.code = "LICENSE_CANCELLED";
+    throw err;
+  }
 
   const payload = await activateRemote({ license_key: licenseKey.trim(), email: email.trim(), device_id: deviceId });
-  await chrome.storage.local.set({
+  await storage.set({
     [STORAGE_ACTIVATION]: {
       license_key: licenseKey.trim(),
       email: email.trim(),
@@ -256,6 +280,7 @@ async function handleDraftClick() {
     }
   } catch (err) {
     console.error("HERO.IA draft error", err);
+    if (err?.code === "LICENSE_CANCELLED" || err?.message === "Licença não informada.") return;
     alert(err?.message || "Erro ao gerar rascunho.");
   } finally {
     setLoading("loadingDraft", false);
@@ -283,6 +308,7 @@ async function handleCopilotClick() {
     }
   } catch (err) {
     console.error("HERO.IA copiloto error", err);
+    if (err?.code === "LICENSE_CANCELLED" || err?.message === "Licença não informada.") return;
     alert(err?.message || "Erro ao rodar Copiloto.");
   } finally {
     setLoading("loadingCopilot", false);
