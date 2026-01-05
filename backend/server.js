@@ -4,8 +4,8 @@ import cors from "cors";
 import OpenAI from "openai";
 import fs from "fs";
 import { createClient } from "@supabase/supabase-js";
-import { buildCopilotPrompt } from "./backend/prompt-copilot.js";
-import { buildPromptForMessage } from "./backend/prompt-draft.js";
+import { buildCopilotPrompt } from "./prompt-copilot.js";
+import { buildPromptForMessage } from "./prompt-draft.js";
 
 const app = express();
 app.use(cors());
@@ -525,13 +525,22 @@ app.post("/api/license/activate", async (req, res) => {
 
     requireSupabaseReady();
     const keyColumn = license.keyColumn || "license_key";
+    // Detectar origem para notes
+    let notes = req.body?.notes || "";
+    if (!notes) {
+      if (req.body?.source === "PWA") notes = "ativado via PWA";
+      else if (req.body?.source === "ECWW") notes = "ativado via Extensão Chrome WhatsApp";
+    }
+    const now = new Date().toISOString();
     const { data, error } = await supabase
       .from("licenses")
       .update({
         status: "active",
         email,
         device_id,
-        activated_at: new Date().toISOString()
+        notes,
+        activated_at: now,
+        last_used: now
       })
       .eq(keyColumn, license_key)
       .select("*")
