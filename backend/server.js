@@ -145,16 +145,31 @@ async function licenseMiddleware(req, res, next) {
       expiresAt: license.expiresAt
     };
 
-    // Atualiza last_seen_at na license_activations
+    // Verificar status do device na license_activations
     try {
       requireSupabaseReady();
+      const { data: activation, error: actErr } = await supabase
+        .from('license_activations')
+        .select('user_status')
+        .eq('license_key', licenseKey)
+        .eq('device_id', deviceId)
+        .order('activated_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (actErr) {
+        console.error('[licenseMiddleware] erro ao consultar activation:', actErr);
+      }
+      if (activation && activation.user_status === 'blocked') {
+        return res.status(403).json({ error: 'Dispositivo bloqueado' });
+      }
+      // Atualiza last_seen_at na license_activations
       await supabase
-        .from("license_activations")
+        .from('license_activations')
         .update({ last_seen_at: new Date().toISOString() })
-        .eq("license_key", license.key)
-        .eq("device_id", deviceId);
+        .eq('license_key', licenseKey)
+        .eq('device_id', deviceId);
     } catch (e) {
-      console.error("[licenseMiddleware] erro ao atualizar last_seen_at:", e?.message || e);
+      console.error('[licenseMiddleware] erro ao consultar/atualizar activation:', e?.message || e);
     }
 
     return next();
@@ -578,7 +593,8 @@ app.post("/api/license/activate", async (req, res) => {
           source: source || null,
           activated_at: now,
           last_seen_at: now,
-          user_agent: userAgent
+          user_agent: userAgent,
+          user_status: 'active'
         };
         const { error: activationError } = await supabase
           .from("license_activations")
