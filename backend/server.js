@@ -503,14 +503,18 @@ function shouldAppendSignature({ mode, userText, aiText }) {
 app.get("/health", (_req, res) => res.json({ ok: true, license: APP_REQUIRE_LICENSE }));
 
 app.post("/api/license/activate", async (req, res) => {
-  const { license_key, email, device_id } = req.body || {};
+  const { license_key, user_key, email, device_id } = req.body || {};
+  const providedKey = license_key || user_key;
 
-  if (!license_key || !email || !device_id) {
-    return res.status(400).json({ error: "license_key, email e device_id são obrigatórios" });
+  if (!providedKey || !email || !device_id) {
+    return res.status(400).json({ error: "license_key (ou user_key), email e device_id são obrigatórios" });
   }
 
   try {
-    const license = await fetchLicense(license_key);
+    // Fetch license by either license_key or user_key
+    const license = await fetchLicense(providedKey);
+    console.log("[activate] fetchLicense result:", { found: !!license, providedKey, id: license?.id });
+
     if (!license) return res.status(404).json({ error: "Licença não encontrada" });
     if (license.status === "blocked") return res.status(403).json({ error: "Licença bloqueada" });
     if (isExpired(license.expiresAt)) return res.status(403).json({ error: "Licença expirada" });
@@ -524,34 +528,57 @@ app.post("/api/license/activate", async (req, res) => {
     }
 
     requireSupabaseReady();
+
+    // Use the column that was actually matched when fetching the license
     const keyColumn = license.keyColumn || "license_key";
-    // Detectar origem para notes
+    const searchKeyValue = license.key || providedKey;
+
+    console.log("[activate] preparing update:", { id: license.id, keyColumn, searchKeyValue, incomingDeviceId: device_id });
+
+    // Build notes (normalize source)
     let notes = req.body?.notes || "";
+    const source = String(req.body?.source || "").toLowerCase();
     if (!notes) {
-      if (req.body?.source === "PWA") notes = "ativado via PWA";
-      else if (req.body?.source === "ECWW") notes = "ativado via Extensão Chrome WhatsApp";
+      if (source === "pwa") notes = "ativado via PWA";
+      else if (source === "ecww") notes = "ativado via Extensão Chrome WhatsApp";
     }
+
     const now = new Date().toISOString();
-    const { data, error } = await supabase
+
+    // Validate device_id looks like a UUID (basic check). If invalid, set null and warn.
+    const isUuid = typeof device_id === "string" && /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/.test(device_id);
+    const deviceToSet = isUuid ? device_id : null;
+    if (!isUuid) console.warn("[activate] device_id inválido, gravando NULL:", device_id);
+
+    // Perform update and request the updated row back
+    const { data: updatedData, error: updateError } = await supabase
       .from("licenses")
       .update({
         status: "active",
         email,
-        device_id,
+        device_id: deviceToSet,
         notes,
         activated_at: now,
         last_used: now
       })
-      .eq(keyColumn, license_key)
+      .eq(keyColumn, searchKeyValue)
       .select("*")
       .maybeSingle();
 
-    if (error) {
-      console.error("Erro ao ativar licença:", error.message || error);
-      return res.status(500).json({ error: "Erro ao ativar licença" });
+    if (updateError) {
+      // Log full error object for debugging
+      console.error("[activate] update failed:", updateError);
+      return res.status(500).json({ error: "Erro ao ativar licença", detail: updateError.message || updateError });
     }
 
-    const updated = normalizeLicense(data || license);
+    if (!updatedData) {
+      console.warn("[activate] update retornou sem linha (verifique keyColumn/searchKeyValue):", { keyColumn, searchKeyValue });
+      return res.status(500).json({ error: "Falha ao recuperar licença atualizada" });
+    }
+
+    const updated = normalizeLicense(updatedData);
+    console.log("[activate] licença atualizada com sucesso:", { id: updated.id, key: updated.key, deviceId: updated.deviceId });
+
     return res.json({ status: "active", expires_at: updated.expiresAt || null });
   } catch (err) {
     console.error("/api/license/activate error", err?.message || err);
