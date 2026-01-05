@@ -27,9 +27,12 @@ node server.js
 ```
 O servidor iniciará na porta 3000 (ou `PORT` definida no `.env`).
 ## Endpoints
+
 ### POST /api/license/activate
 Ativa ou valida uma licença centralizada no Supabase.
-- Body: `{ "license_key": "...", "email": "...", "device_id": "..." }`
+- Body (PWA): `{ "license_key": "...", "email": "...", "device_id": "...", "notes": "PWA", "source": "PWA" }`
+- Body (Extensão Chrome): `{ "license_key": "...", "email": "...", "device_id": "...", "notes": "ECWW", "source": "ECWW" }`
+- O backend salva o campo notes (e utiliza source para diferenciar a origem). Outros campos como email, device_id, activated_at e last_used também são atualizados.
 - Respostas possíveis:
   - 200 `{ "status": "active", "expires_at": "2026-01-04T00:00:00.000Z" }`
   - 403/404 com `{ error: "motivo" }`
