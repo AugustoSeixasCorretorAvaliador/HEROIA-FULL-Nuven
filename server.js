@@ -688,8 +688,6 @@ app.post("/api/license/activate", async (req, res) => {
       else if (src === "ecww") notes = "ativado via Extensão Chrome WhatsApp";
     }
 
-    const now = new Date().toISOString();
-
     // Permite device_id como string longa (mínimo 12 caracteres), não só UUID
     let deviceToSet = null;
     if (typeof device_id === "string" && device_id.length >= 12) {
