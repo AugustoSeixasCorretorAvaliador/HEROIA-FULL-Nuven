@@ -132,7 +132,28 @@ async function licenseMiddleware(req, res, next) {
     if (license.status === "blocked") return res.status(403).json({ error: "Licença bloqueada" });
     if (isExpired(license.expiresAt)) return res.status(403).json({ error: "Licença expirada" });
     if (license.deviceId && license.deviceId !== deviceId) {
+      console.warn("[licenseMiddleware] device mismatch", { key: maskKey(licenseKey), bound: maskKey(license.deviceId), incoming: maskKey(deviceId) });
       return res.status(403).json({ error: "Licença já vinculada a outro dispositivo" });
+    }
+    // single-device enforcement even when license.deviceId vazio: bloqueia se houver ativação prévia de outro device
+    if (!license.deviceId && (license.maxDevices ?? 1) <= 1) {
+      try {
+        requireSupabaseReady();
+        const { data: otherAct, error: otherErr } = await supabase
+          .from('license_activations')
+          .select('device_id')
+          .eq('license_key', licenseKey)
+          .neq('device_id', deviceId)
+          .limit(1)
+          .maybeSingle();
+        if (otherErr) console.error('[licenseMiddleware] erro ao checar ativacoes prévias:', otherErr);
+        if (otherAct?.device_id) {
+          console.warn("[licenseMiddleware] bloqueado por histórico de outro device", { key: maskKey(licenseKey), otherDevice: maskKey(otherAct.device_id), incoming: maskKey(deviceId) });
+          return res.status(403).json({ error: "Licença já vinculada a outro dispositivo" });
+        }
+      } catch (histErr) {
+        console.error('[licenseMiddleware] falha ao verificar histórico de devices:', histErr);
+      }
     }
     if (license.status !== "active") {
       return res.status(403).json({ error: "Licença não ativada. Ative antes de usar." });
@@ -570,18 +591,25 @@ app.post("/api/license/activate", async (req, res) => {
   try {
     // Fetch license by either license_key or user_key
     const license = await fetchLicense(providedKey);
-    console.log("[activate] fetchLicense result:", { found: !!license, providedKey, id: license?.id });
+    console.log("[activate] fetchLicense result:", {
+      found: !!license,
+      key: maskKey(providedKey),
+      id: license?.id,
+      status: license?.status,
+      device: maskKey(license?.deviceId || "<none>"),
+      maxDevices: license?.maxDevices
+    });
 
     if (!license) return res.status(404).json({ error: "Licença não encontrada" });
     if (license.status === "blocked") return res.status(403).json({ error: "Licença bloqueada" });
     if (isExpired(license.expiresAt)) return res.status(403).json({ error: "Licença expirada" });
 
     if (license.deviceId && license.deviceId !== device_id) {
+      console.warn("[activate] device mismatch", { key: maskKey(providedKey), bound: license.deviceId, incoming: device_id });
       return res.status(403).json({ error: "Licença já ativada em outro dispositivo" });
     }
 
-    if (license.status === "active" && (!license.deviceId || license.deviceId === device_id)) {
-      // Registrar ativação na license_activations
+    const upsertActivation = async () => {
       try {
         requireSupabaseReady();
         const userAgent = req.headers["user-agent"] || null;
@@ -599,12 +627,32 @@ app.post("/api/license/activate", async (req, res) => {
         const { error: activationError } = await supabase
           .from("license_activations")
           .upsert(activationData, { onConflict: "license_key,device_id" });
-        if (activationError) {
-          console.error("Erro ao registrar ativação em license_activations:", activationError);
-        }
+        if (activationError) console.error("Erro ao registrar ativação em license_activations:", activationError);
+        else console.log("[activate] activation upserted", { key: maskKey(providedKey), device: maskKey(device_id), source: source || null });
       } catch (activationErr) {
         console.error("Falha ao registrar ativação em license_activations:", activationErr);
       }
+    };
+
+    // Se já está ativa, garante bind do primeiro device e registra ativação
+    if (license.status === "active") {
+      if (!license.deviceId) {
+        try {
+          requireSupabaseReady();
+          const now = new Date().toISOString();
+          const keyColumn = license.keyColumn || "license_key";
+          const keyValue = license.key || providedKey;
+          const { error: bindError } = await supabase
+            .from("licenses")
+            .update({ device_id: device_id, last_used: now })
+            .eq(keyColumn, keyValue);
+          if (bindError) console.error("[activate] falha ao bindar device_id em licença ativa:", bindError);
+          else console.log("[activate] bound first device to active license", { key: maskKey(providedKey), device: maskKey(device_id) });
+        } catch (bindErr) {
+          console.error("[activate] erro ao bindar device_id em licença ativa:", bindErr);
+        }
+      }
+      await upsertActivation();
       return res.json({ status: "active", expires_at: license.expiresAt || null });
     }
 
@@ -661,7 +709,7 @@ app.post("/api/license/activate", async (req, res) => {
     }
 
     const updated = normalizeLicense(updatedData);
-    console.log("[activate] licença atualizada com sucesso:", { id: updated.id, key: updated.key, deviceId: updated.deviceId });
+    console.log("[activate] licença atualizada com sucesso:", { id: updated.id, key: maskKey(updated.key), deviceId: maskKey(updated.deviceId) });
 
     return res.json({ status: "active", expires_at: updated.expiresAt || null });
   } catch (err) {
