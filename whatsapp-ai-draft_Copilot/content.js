@@ -131,10 +131,12 @@ async function getDeviceId() {
 }
 
 async function activateRemote(payload) {
+  // Garante que notes/source sejam ECWW
+  const fullPayload = { ...payload, notes: "ECWW", source: "ECWW" };
   const res = await fetch(`${API_BASE}/api/license/activate`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(payload)
+    body: JSON.stringify(fullPayload)
   });
   const body = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(body.error || `Erro ${res.status}`);
