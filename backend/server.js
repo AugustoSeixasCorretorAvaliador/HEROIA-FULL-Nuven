@@ -144,6 +144,19 @@ async function licenseMiddleware(req, res, next) {
       deviceId,
       expiresAt: license.expiresAt
     };
+
+    // Atualiza last_seen_at na license_activations
+    try {
+      requireSupabaseReady();
+      await supabase
+        .from("license_activations")
+        .update({ last_seen_at: new Date().toISOString() })
+        .eq("license_key", license.key)
+        .eq("device_id", deviceId);
+    } catch (e) {
+      console.error("[licenseMiddleware] erro ao atualizar last_seen_at:", e?.message || e);
+    }
+
     return next();
   } catch (err) {
     console.error("Erro ao validar licença:", err?.message || err);
@@ -532,7 +545,7 @@ function shouldAppendSignature({ mode, userText, aiText }) {
 app.get("/health", (_req, res) => res.json({ ok: true, license: APP_REQUIRE_LICENSE }));
 
 app.post("/api/license/activate", async (req, res) => {
-  const { license_key, user_key, email, device_id } = req.body || {};
+  const { license_key, user_key, email, device_id, source } = req.body || {};
   const providedKey = license_key || user_key;
 
   if (!providedKey || !email || !device_id) {
@@ -553,11 +566,33 @@ app.post("/api/license/activate", async (req, res) => {
     }
 
     if (license.status === "active" && (!license.deviceId || license.deviceId === device_id)) {
+      // Registrar ativação na license_activations
+      try {
+        requireSupabaseReady();
+        const userAgent = req.headers["user-agent"] || null;
+        const now = new Date().toISOString();
+        const activationData = {
+          license_key: providedKey,
+          device_id,
+          email,
+          source: source || null,
+          activated_at: now,
+          last_seen_at: now,
+          user_agent: userAgent
+        };
+        const { error: activationError } = await supabase
+          .from("license_activations")
+          .upsert(activationData, { onConflict: "license_key,device_id" });
+        if (activationError) {
+          console.error("Erro ao registrar ativação em license_activations:", activationError);
+        }
+      } catch (activationErr) {
+        console.error("Falha ao registrar ativação em license_activations:", activationErr);
+      }
       return res.json({ status: "active", expires_at: license.expiresAt || null });
     }
 
     requireSupabaseReady();
-
 
     // Use the column and value returned by the loaded license for the update
     const keyColumn = license.keyColumn || "license_key";
@@ -567,18 +602,21 @@ app.post("/api/license/activate", async (req, res) => {
 
     // Build notes (normalize source)
     let notes = req.body?.notes || "";
-    const source = String(req.body?.source || "").toLowerCase();
+    const src = String(source || "").toLowerCase();
     if (!notes) {
-      if (source === "pwa") notes = "ativado via PWA";
-      else if (source === "ecww") notes = "ativado via Extensão Chrome WhatsApp";
+      if (src === "pwa") notes = "ativado via PWA";
+      else if (src === "ecww") notes = "ativado via Extensão Chrome WhatsApp";
     }
 
     const now = new Date().toISOString();
 
-    // Validate device_id looks like a UUID (basic check). If invalid, set null and warn.
-    const isUuid = typeof device_id === "string" && /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/.test(device_id);
-    const deviceToSet = isUuid ? device_id : null;
-    if (!isUuid) console.warn("[activate] device_id inválido, gravando NULL:", device_id);
+    // Permite device_id como string longa (mínimo 12 caracteres), não só UUID
+    let deviceToSet = null;
+    if (typeof device_id === "string" && device_id.length >= 12) {
+      deviceToSet = device_id;
+    } else {
+      console.warn("[activate] device_id muito curto ou ausente, gravando NULL:", device_id);
+    }
 
     // Perform update and request the updated row back
     const { data: updatedData, error: updateError } = await supabase
