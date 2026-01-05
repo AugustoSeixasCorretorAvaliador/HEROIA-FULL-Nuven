@@ -604,16 +604,32 @@ app.post("/api/license/activate", async (req, res) => {
     if (license.status === "blocked") return res.status(403).json({ error: "Licença bloqueada" });
     if (isExpired(license.expiresAt)) return res.status(403).json({ error: "Licença expirada" });
 
-    if (license.deviceId && license.deviceId !== device_id) {
-      console.warn("[activate] device mismatch", { key: maskKey(providedKey), bound: license.deviceId, incoming: device_id });
-      return res.status(403).json({ error: "Licença já ativada em outro dispositivo" });
+    const now = new Date().toISOString();
+    const isTransfer = license.deviceId && license.deviceId !== device_id;
+
+    if (isTransfer) {
+      console.warn("[activate] transfer requested", { key: maskKey(providedKey), from: maskKey(license.deviceId), to: maskKey(device_id) });
     }
+
+    const blockOtherActivations = async () => {
+      try {
+        requireSupabaseReady();
+        const { error: blockErr } = await supabase
+          .from("license_activations")
+          .update({ user_status: 'blocked', last_seen_at: now })
+          .eq("license_key", providedKey)
+          .neq("device_id", device_id);
+        if (blockErr) console.error("[activate] erro ao bloquear ativações antigas:", blockErr);
+        else console.log("[activate] outras ativações bloqueadas", { key: maskKey(providedKey), keep: maskKey(device_id) });
+      } catch (blockEx) {
+        console.error("[activate] falha ao bloquear ativações antigas:", blockEx);
+      }
+    };
 
     const upsertActivation = async () => {
       try {
         requireSupabaseReady();
         const userAgent = req.headers["user-agent"] || null;
-        const now = new Date().toISOString();
         const activationData = {
           license_key: providedKey,
           device_id,
@@ -636,10 +652,9 @@ app.post("/api/license/activate", async (req, res) => {
 
     // Se já está ativa, garante bind do primeiro device e registra ativação
     if (license.status === "active") {
-      if (!license.deviceId) {
+      if (!license.deviceId || isTransfer) {
         try {
           requireSupabaseReady();
-          const now = new Date().toISOString();
           const keyColumn = license.keyColumn || "license_key";
           const keyValue = license.key || providedKey;
           const { error: bindError } = await supabase
@@ -647,11 +662,12 @@ app.post("/api/license/activate", async (req, res) => {
             .update({ device_id: device_id, last_used: now })
             .eq(keyColumn, keyValue);
           if (bindError) console.error("[activate] falha ao bindar device_id em licença ativa:", bindError);
-          else console.log("[activate] bound first device to active license", { key: maskKey(providedKey), device: maskKey(device_id) });
+          else console.log("[activate] bound device to active license", { key: maskKey(providedKey), device: maskKey(device_id), transfer: isTransfer });
         } catch (bindErr) {
           console.error("[activate] erro ao bindar device_id em licença ativa:", bindErr);
         }
       }
+      await blockOtherActivations();
       await upsertActivation();
       return res.json({ status: "active", expires_at: license.expiresAt || null });
     }
@@ -710,6 +726,9 @@ app.post("/api/license/activate", async (req, res) => {
 
     const updated = normalizeLicense(updatedData);
     console.log("[activate] licença atualizada com sucesso:", { id: updated.id, key: maskKey(updated.key), deviceId: maskKey(updated.deviceId) });
+
+    await blockOtherActivations();
+    await upsertActivation();
 
     return res.json({ status: "active", expires_at: updated.expiresAt || null });
   } catch (err) {
