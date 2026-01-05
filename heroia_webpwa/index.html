@@ -170,7 +170,7 @@
         const res = await fetch(`${API_BASE}/api/license/activate`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ license_key, email, device_id: DEVICE_ID })
+          body: JSON.stringify({ license_key, email, device_id: DEVICE_ID, notes: "PWA", source: "PWA" })
         });
 
         const payload = await res.json().catch(() => ({}));
