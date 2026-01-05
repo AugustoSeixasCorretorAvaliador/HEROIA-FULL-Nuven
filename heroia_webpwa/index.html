@@ -93,6 +93,12 @@
     const licensePill = document.getElementById("license-pill");
     const btnActivate = document.getElementById("btn-activate");
 
+    const maskKeyView = (key = "") => {
+      const clean = String(key || "").trim();
+      if (clean.length <= 8) return clean;
+      return `${clean.slice(0, 4)}******${clean.slice(-4)}`;
+    };
+
     function generateDeviceId() {
       if (crypto?.randomUUID) return crypto.randomUUID();
       return `dev-${Date.now()}-${Math.random().toString(16).slice(2, 10)}`;
@@ -155,7 +161,10 @@
 
     async function activateLicense(event) {
       event.preventDefault();
-      const license_key = licenseKeyInput.value.trim();
+      const inputKey = licenseKeyInput.value.trim();
+      const license_key = (inputKey.includes("•") || inputKey.includes("*")) && licenseKeyInput.dataset.rawKey
+        ? licenseKeyInput.dataset.rawKey
+        : inputKey;
       const email = licenseEmailInput.value.trim();
       if (!license_key || !email) {
         renderActivation({ status: "error" }, "Preencha license key e e-mail.");
@@ -184,6 +193,8 @@
           expires_at: payload.expires_at || null
         };
         saveActivation(state);
+        licenseKeyInput.dataset.rawKey = license_key;
+        licenseKeyInput.value = maskKeyView(license_key);
         renderActivation(state, "Licença ativada neste dispositivo.");
       } catch (err) {
         console.error("Ativação falhou", err);
@@ -295,7 +306,8 @@
 
     const existing = loadActivation();
     if (existing) {
-      licenseKeyInput.value = existing.license_key || "";
+      licenseKeyInput.dataset.rawKey = existing.license_key || "";
+      licenseKeyInput.value = maskKeyView(existing.license_key || "");
       licenseEmailInput.value = existing.email || "";
       if (!existing.device_id) {
         const updated = { ...existing, device_id: DEVICE_ID };
