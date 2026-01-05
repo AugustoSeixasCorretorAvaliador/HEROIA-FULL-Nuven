@@ -242,6 +242,30 @@ function ensureToolbar() {
     toolbar.appendChild(draftBtn);
   }
 
+  let infoWrapper = toolbar.querySelector('#heroia-info-wrapper');
+  if (!infoWrapper) {
+    infoWrapper = document.createElement('div');
+    infoWrapper.id = 'heroia-info-wrapper';
+    infoWrapper.innerHTML = `
+      <button id="heroia-info-btn" title="Status da Licença HERO.IA">
+        <img src="${chrome.runtime.getURL('botao.jpg')}" alt="HERO.IA Info">
+      </button>
+      <div id="heroia-info-popup" class="heroia-hidden">
+        <button id="heroia-info-close" aria-label="Fechar" title="Fechar">✕</button>
+        <div class="heroia-info-header">HERO.IA — Informações</div>
+        <div class="heroia-info-line"><strong>Status:</strong> <span id="info-status"></span></div>
+        <div class="heroia-info-line"><strong>Email:</strong> <span id="info-email"></span></div>
+        <div class="heroia-info-line"><strong>Licença:</strong> <span id="info-license"></span></div>
+        <div class="heroia-info-line"><strong>Device ID:</strong> <span id="info-device"></span></div>
+        <div class="heroia-info-line"><strong>Origem:</strong> Extensão Chrome</div>
+        <div class="heroia-info-line"><strong>Ativado em:</strong> <span id="info-activated"></span></div>
+        <div class="heroia-info-line"><strong>Último acesso:</strong> <span id="info-last"></span></div>
+        <div class="heroia-info-line"><strong>Versão:</strong> <span id="info-version"></span></div>
+      </div>
+    `;
+    toolbar.appendChild(infoWrapper);
+  }
+
   let copilotBtn = toolbar.querySelector(`#${BTN_ID_COPILOT}`);
   if (!copilotBtn) {
     copilotBtn = createButton(BTN_ID_COPILOT, "🧠 HERO.IA Copiloto/Follow-Up", "heroia-btn heroia-btn-copilot", handleCopilotClick);
@@ -325,3 +349,37 @@ function init() {
 const observer = new MutationObserver(() => init());
 observer.observe(document.documentElement, { childList: true, subtree: true });
 init();
+
+// HERO.IA License Info Button Logic (único listener global)
+document.addEventListener("click", (e) => {
+  if (e.target.closest("#heroia-info-btn")) {
+    chrome.storage.local.get(["heroia_license", STORAGE_ACTIVATION], (data) => {
+      const info = data?.heroia_license || data?.[STORAGE_ACTIVATION] || {};
+      const elStatus = document.getElementById("info-status");
+      const elEmail = document.getElementById("info-email");
+      const elLicense = document.getElementById("info-license");
+      const elDevice = document.getElementById("info-device");
+      const elActivated = document.getElementById("info-activated");
+      const elLast = document.getElementById("info-last");
+      const elVersion = document.getElementById("info-version");
+
+      if (elStatus) elStatus.innerText = info.status || "—";
+      if (elEmail) elEmail.innerText = info.email || "—";
+      if (elLicense) {
+        elLicense.innerText = info.license_key
+          ? info.license_key.slice(0, 4) + "•••" + info.license_key.slice(-4)
+          : "—";
+      }
+      if (elDevice) elDevice.innerText = info.device_id || info.deviceId || "—";
+      if (elActivated) elActivated.innerText =
+        info.activated_at ? new Date(info.activated_at).toLocaleString() : "—";
+      if (elLast) elLast.innerText =
+        info.last_seen_at ? new Date(info.last_seen_at).toLocaleString() : "—";
+      if (elVersion) elVersion.innerText = chrome.runtime.getManifest().version;
+      document.getElementById("heroia-info-popup")?.classList.remove("heroia-hidden");
+    });
+  }
+  if (e.target.id === "heroia-info-close") {
+    document.getElementById("heroia-info-popup")?.classList.add("heroia-hidden");
+  }
+});

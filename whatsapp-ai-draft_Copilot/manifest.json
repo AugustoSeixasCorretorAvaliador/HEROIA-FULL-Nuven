@@ -10,11 +10,7 @@
     "128": "icons/icon128.png"
   },
   "action": {
-    "default_icon": {
-      "16": "icons/icon16.png",
-      "48": "icons/icon48.png",
-      "128": "icons/icon128.png"
-    },
+    "default_icon": "icons/icon128.png",
     "default_title": "HERO.IA"
   },
   "permissions": ["scripting", "clipboardWrite", "storage"],
@@ -27,6 +23,12 @@
       "matches": ["https://web.whatsapp.com/*"],
       "js": ["content.js"],
       "css": ["style.css"]
+    }
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": ["botao.jpg"],
+      "matches": ["https://web.whatsapp.com/*"]
     }
   ]
 }
