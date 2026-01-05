@@ -52,15 +52,24 @@ function requireSupabaseReady() {
 }
 
 function normalizeLicense(row = {}) {
+  // Normalize different shapes and ensure we always expose a key and keyColumn
+  const licenseKey = row.license_key ?? null;
+  const userKey = row.user_key ?? null;
+
+  // Prefer license_key if present, otherwise user_key, otherwise fall back to id
+  const key = licenseKey || userKey || (row.id ? String(row.id) : null);
+  const keyColumn = licenseKey ? "license_key" : userKey ? "user_key" : "id";
+
   return {
-    id: row.id,
-    key: row.license_key || row.user_key,
-    keyColumn: row.license_key ? "license_key" : row.user_key ? "user_key" : "id",
-    status: row.status,
-    deviceId: row.device_id || row.deviceId || row.bound_device_id || null,
-    email: row.email || row.user_email || null,
-    expiresAt: row.expires_at || row.expiresAt || null,
-    maxDevices: row.max_devices || row.maxDevices || 1
+    id: row.id ?? null,
+    key,
+    keyColumn,
+    status: row.status ?? null,
+    deviceId: row.device_id ?? row.deviceId ?? row.bound_device_id ?? null,
+    email: row.email ?? row.user_email ?? null,
+    expiresAt: row.expires_at ?? row.expiresAt ?? null,
+    maxDevices: row.max_devices ?? row.maxDevices ?? 1,
+    raw: row // keep original row for debugging if needed
   };
 }
 
@@ -68,15 +77,35 @@ async function fetchLicense(licenseKey) {
   if (!licenseKey) return null;
   requireSupabaseReady();
 
-  let query = supabase.from("licenses").select("*").eq("license_key", licenseKey).maybeSingle();
-  let { data, error } = await query;
+  // Try license_key first
+  let { data, error } = await supabase.from("licenses").select("*").eq("license_key", licenseKey).maybeSingle();
+  if (error && error.code !== "PGRST116") {
+    console.error("[fetchLicense] error querying license_key:", error);
+    throw error;
+  }
+  if (data) {
+    const norm = normalizeLicense(data);
+    // Ensure returned object includes the exact key value used to search
+    norm.key = licenseKey;
+    norm.keyColumn = "license_key";
+    return norm;
+  }
 
-  if (error && error.code !== "PGRST116") throw error;
-  if (data) return normalizeLicense(data);
-
+  // Fallback to user_key
   ({ data, error } = await supabase.from("licenses").select("*").eq("user_key", licenseKey).maybeSingle());
-  if (error && error.code !== "PGRST116") throw error;
-  return data ? normalizeLicense(data) : null;
+  if (error && error.code !== "PGRST116") {
+    console.error("[fetchLicense] error querying user_key:", error);
+    throw error;
+  }
+  if (data) {
+    const norm = normalizeLicense(data);
+    norm.key = licenseKey;
+    norm.keyColumn = "user_key";
+    return norm;
+  }
+
+  // Not found
+  return null;
 }
 
 function isExpired(expiresAt) {
