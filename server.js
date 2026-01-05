@@ -558,11 +558,12 @@ app.post("/api/license/activate", async (req, res) => {
 
     requireSupabaseReady();
 
-    // Use the column that was actually matched when fetching the license
-    const keyColumn = license.keyColumn || "license_key";
-    const searchKeyValue = license.key || providedKey;
 
-    console.log("[activate] preparing update:", { id: license.id, keyColumn, searchKeyValue, incomingDeviceId: device_id });
+    // Use the column and value returned by the loaded license for the update
+    const keyColumn = license.keyColumn || "license_key";
+    const keyValue = license.key || license_key;
+
+    console.log("[activate] preparing update:", { id: license.id, keyColumn, keyValue, incomingDeviceId: device_id });
 
     // Build notes (normalize source)
     let notes = req.body?.notes || "";
@@ -590,7 +591,7 @@ app.post("/api/license/activate", async (req, res) => {
         activated_at: now,
         last_used: now
       })
-      .eq(keyColumn, searchKeyValue)
+      .eq(keyColumn, keyValue)
       .select("*")
       .maybeSingle();
 
