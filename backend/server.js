@@ -352,6 +352,18 @@ function isRealEstateIntent(msgNorm = "") {
 
 function buildFallbackPayload({ msg = "", msgNorm = "" } = {}) {
   const normalized = msgNorm || norm(msg || "");
+  const isShort = normalized.split(/\s+/).filter(Boolean).length <= 7;
+  const wantsSell = normalized.includes("vender") || normalized.includes("venda") || normalized.includes("meu imovel") || normalized.includes("meu imóvel") || normalized.includes("imovel") || normalized.includes("imóvel");
+  if (isShort && wantsSell) {
+    return {
+      resposta: "Olá! Que ótimo saber que você deseja vender seu imóvel. Pode me contar o tipo, bairro/cidade e se tem urgência? Assim já organizo a melhor estratégia para você. 😊",
+      followups: [
+        "Qual o tipo do imóvel (apto, casa, sala, lote) e metragem aproximada?",
+        "Em que bairro/cidade ele está e qual sua expectativa de valor?",
+        "Você tem alguma urgência ou prazo para a venda?"
+      ]
+    };
+  }
   const concernTerms = ["economia", "crise", "juros", "taxa", "taxas", "inflacao", "infla", "medo", "receio", "incerteza", "dolar", "politica", "eleicao", "guerra"];
   const hasConcern = concernTerms.some((t) => normalized.includes(t));
   const concernLead = hasConcern ? "Entendi sua preocupação com a economia. " : "";
