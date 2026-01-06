@@ -1,0 +1,83 @@
+
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+  <meta charset="UTF-8" />
+  <title>HERO.IA — Admin Licenças</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background: #f2f6ff;
+      padding: 40px;
+    }
+    .box {
+      background: #fff;
+      padding: 24px;
+      border-radius: 12px;
+      max-width: 460px;
+      margin: auto;
+      box-shadow: 0 10px 25px rgba(0,0,0,0.15);
+    }
+    input, button {
+      width: 100%;
+      padding: 12px;
+      margin-top: 10px;
+      font-size: 15px;
+    }
+    button {
+      cursor: pointer;
+      border: none;
+      border-radius: 8px;
+    }
+    .active { background: #1f9d55; color: #fff; }
+    .blocked { background: #d93025; color: #fff; }
+    .result { margin-top: 15px; font-weight: bold; }
+    .muted { font-size: 13px; color: #4b5563; margin-top: 6px; }
+  </style>
+</head>
+<body>
+
+<div class="box">
+  <h2>🔐 HERO.IA — Admin Licenças</h2>
+
+  <input id="licenseKey" placeholder="Insira a License Key 🔑" />
+  <input id="adminToken" placeholder="Token admin" value="heroia_app_admin" />
+  <div class="muted">Endpoint: POST /admin/license — backend porta 3002 (mesma do server)</div>
+
+  <button class="active" onclick="updateLicense('active')">Ativar</button>
+  <button class="blocked" onclick="updateLicense('blocked')">Bloquear</button>
+
+  <div class="result" id="result"></div>
+</div>
+
+<script>
+  const API_URL = "http://localhost:3002/admin/license";
+
+  async function updateLicense(action) {
+    const license_key = document.getElementById("licenseKey").value.trim();
+    const token = document.getElementById("adminToken").value.trim();
+    if (!license_key) return alert("Informe a license key");
+    if (!token) return alert("Informe o token admin");
+
+    try {
+      const res = await fetch(API_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ license_key, action, token })
+      });
+
+      const data = await res.json();
+      if (!res.ok || !data.ok) {
+        document.getElementById("result").innerText = `Erro: ${data.error || res.status}`;
+        return;
+      }
+
+      document.getElementById("result").innerText = `Licença ${data.license_key} agora está ${data.status?.toUpperCase() || "DESCONHECIDO"}`;
+    } catch (err) {
+      document.getElementById("result").innerText = `Falha na requisição: ${err.message}`;
+    }
+  }
+</script>
+
+</body>
+</html>
