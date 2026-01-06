@@ -45,6 +45,9 @@ const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 const supabase = SUPABASE_URL && SUPABASE_SERVICE_ROLE_KEY ? createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY) : null;
 
+// Token do painel admin (defina em produção)
+const ADMIN_TOKEN = process.env.ADMIN_TOKEN || "heroia_app_admin";
+
 function requireSupabaseReady() {
   if (!supabase) {
     throw new Error("Supabase não configurado. Defina SUPABASE_URL e SUPABASE_SERVICE_ROLE_KEY.");
@@ -134,6 +137,31 @@ async function licenseMiddleware(req, res, next) {
       deviceId,
       expiresAt: license.expiresAt
     };
+    // Verifica status do device e atualiza last_seen_at
+    try {
+      requireSupabaseReady();
+      const { data: activation, error: actErr } = await supabase
+        .from("license_activations")
+        .select("user_status")
+        .eq("license_key", licenseKey)
+        .eq("device_id", deviceId)
+        .order("activated_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (actErr) {
+        console.error("[licenseMiddleware] erro ao consultar activation:", actErr);
+      }
+      if (activation && activation.user_status === "blocked") {
+        return res.status(403).json({ error: "Dispositivo bloqueado" });
+      }
+      await supabase
+        .from("license_activations")
+        .update({ last_seen_at: new Date().toISOString() })
+        .eq("license_key", licenseKey)
+        .eq("device_id", deviceId);
+    } catch (e) {
+      console.error("[licenseMiddleware] erro ao consultar/atualizar activation:", e?.message || e);
+    }
     return next();
   } catch (err) {
     console.error("Erro ao validar licença:", err?.message || err);
@@ -520,6 +548,55 @@ function shouldAppendSignature({ mode, userText, aiText }) {
 // Rotas
 // ===============================
 app.get("/health", (_req, res) => res.json({ ok: true, license: APP_REQUIRE_LICENSE }));
+
+app.post("/admin/license", async (req, res) => {
+  const { license_key, user_key, action, token } = req.body || {};
+  const providedKey = license_key || user_key;
+
+  if (token !== ADMIN_TOKEN) {
+    return res.status(403).json({ error: "Acesso negado" });
+  }
+
+  if (!providedKey || !["active", "blocked"].includes(action)) {
+    return res.status(400).json({ error: "Dados inválidos" });
+  }
+
+  try {
+    requireSupabaseReady();
+
+    const { data: updated, error: updErr } = await supabase
+      .from("licenses")
+      .update({ status: action })
+      .or(`license_key.eq.${providedKey},user_key.eq.${providedKey}`)
+      .select("id, license_key, user_key, status")
+      .maybeSingle();
+
+    if (updErr) {
+      console.error("[admin] erro ao atualizar license:", updErr);
+      return res.status(500).json({ error: "Falha ao atualizar licença" });
+    }
+
+    if (!updated) {
+      return res.status(404).json({ error: "Licença não encontrada" });
+    }
+
+    const now = new Date().toISOString();
+    await supabase.from("license_activations").insert({
+      license_key: updated.license_key || updated.user_key || providedKey,
+      device_id: "ADMIN_ACTION",
+      source: "ADMIN_PANEL",
+      user_status: action,
+      activated_at: now,
+      last_seen_at: now,
+      user_agent: "admin-app"
+    });
+
+    return res.json({ ok: true, license_key: updated.license_key || providedKey, status: updated.status });
+  } catch (err) {
+    console.error("[admin] erro interno:", err?.message || err);
+    return res.status(500).json({ error: "Erro interno" });
+  }
+});
 
 app.post("/whatsapp/copilot", licenseMiddleware, async (req, res) => {
   try {
