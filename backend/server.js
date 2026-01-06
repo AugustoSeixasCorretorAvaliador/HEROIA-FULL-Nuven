@@ -4,8 +4,8 @@ import cors from "cors";
 import OpenAI from "openai";
 import fs from "fs";
 import { createClient } from "@supabase/supabase-js";
-import { buildCopilotPrompt } from "./backend/prompt-copilot.js";
-import { buildPromptForMessage } from "./backend/prompt-draft.js";
+import { buildCopilotPrompt } from "./prompt-copilot.js";
+import { buildPromptForMessage } from "./prompt-draft.js";
 
 const app = express();
 app.use(cors());
