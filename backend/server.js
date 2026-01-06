@@ -603,7 +603,10 @@ app.post("/admin/license", async (req, res) => {
 
     if (updErr) {
       console.error("[admin] erro ao atualizar license:", updErr);
-      return res.status(500).json({ error: "Falha ao atualizar licença" });
+      return res.status(500).json({
+        error: "Falha ao atualizar licença",
+        detail: updErr?.message || updErr?.details || updErr?.hint || updErr?.code || null
+      });
     }
 
     if (!updated) {
