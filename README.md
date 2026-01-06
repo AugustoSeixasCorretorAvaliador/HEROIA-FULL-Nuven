@@ -23,9 +23,9 @@ cp .env.example .env
 3. Licenciamento agora é centralizado no Supabase. Nenhum arquivo JSON local é usado para licenças.
 ## Execução
 ```bash
-node server.js
+node backend/server.js
 ```
-O servidor iniciará na porta 3000 (ou `PORT` definida no `.env`).
+O servidor inicia na porta 3002 por padrão (ou `PORT` no `.env`).
 ## Endpoints
 
 ### POST /api/license/activate
@@ -54,6 +54,14 @@ Analisa mensagem e fornece análise, sugestão e rascunho.
 ### GET /health
 Verifica status do servidor.
 - Resposta: `{ "ok": true, "license": true }`
+
+### POST /admin/license
+Administra status da licença (fonte de verdade: coluna `status` em `licenses`).
+- Body: `{ "license_key": "...", "action": "active" | "blocked", "token": "..." }`
+- Header: `Content-Type: application/json`
+- Proteção simples por token: `ADMIN_TOKEN` (default `heroia_app_admin`). Defina no `.env`.
+- Atualiza `licenses.status` e registra evento em `license_activations`.
+- Resposta: `{ ok: true, license_key: "...", status: "active" | "blocked" }`
 
 ## 🌐 Deploy no Render
 
@@ -99,6 +107,12 @@ fetch('https://seu-app.render.com/whatsapp/copilot', {
 - **dotenv**: Carregamento de variáveis de ambiente
 - **cors**: Habilitação de CORS para requisições cross-origin
 - **openai**: Cliente OpenAI v4
+
+## 🖥️ Painel Admin (HTML)
+
+- Arquivo: `heroia_app_admin/index.html`
+- Aponta por padrão para `http://localhost:3002/admin/license`.
+- Preencha License Key e o `ADMIN_TOKEN` (mesmo valor definido no backend). Botões “Ativar” e “Bloquear” enviam para o endpoint e exibem o status retornado.
 
 ## 🛡️ Segurança
 
