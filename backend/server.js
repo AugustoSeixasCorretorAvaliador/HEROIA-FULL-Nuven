@@ -319,6 +319,25 @@ function isRealEstateIntent(msgNorm = "") {
   return hasTip || hasHint;
 }
 
+function isSellingIntent(msgNorm = "") {
+  if (!msgNorm) return false;
+  const hints = [
+    "vender",
+    "quero vender",
+    "preciso vender",
+    "vou vender",
+    "colocar a venda",
+    "colocar à venda",
+    "anunciar meu imovel",
+    "anunciar meu imóvel",
+    "vender meu imovel",
+    "vender meu imóvel",
+    "vender minha casa",
+    "vender meu apartamento"
+  ].map((h) => norm(h));
+  return hints.some((k) => msgNorm.includes(k));
+}
+
 function buildFallbackPayload({ msg = "", msgNorm = "" } = {}) {
   const normalized = msgNorm || norm(msg || "");
   const concernTerms = ["economia", "crise", "juros", "taxa", "taxas", "inflacao", "infla", "medo", "receio", "incerteza", "dolar", "politica", "eleicao", "guerra"];
@@ -331,6 +350,17 @@ function buildFallbackPayload({ msg = "", msgNorm = "" } = {}) {
       "Pode me dizer agora o nome ou bairro e a tipologia (studio, 2q, 3q, 4q, Lotes)?",
       "Me passa o bairro favorito que eu puxo em segundos as opções certas.",
       "Se preferir, faço uma ligação rápida só para alinhar e enviar as opções ideais."
+    ]
+  };
+}
+
+function buildSellingPayload() {
+  return {
+    resposta: "Entendi que você quer vender seu imóvel. Eu posso ajudar com a avaliação e divulgação. Me informe o tipo do imóvel, bairro, metragem, valor pedido e um telefone para alinharmos a estratégia de venda.",
+    followups: [
+      "Qual é o tipo do imóvel (casa, apê, cobertura)?",
+      "Qual bairro e metragem aproximada?",
+      "Qual o valor pedido e o melhor telefone para eu te retornar?"
     ]
   };
 }
@@ -733,6 +763,12 @@ const draftHandler = async (req, res) => {
 
     const { list: candidates, reason, bairros, tipKeys, msgNorm } = findCandidates(msg);
     console.log("[findCandidates]", { reason, bairros, tipKeys, total: candidates?.length });
+
+    const sellingIntent = isSellingIntent(msgNorm);
+    if (sellingIntent) {
+      const payload = buildSellingPayload();
+      return res.json({ draft: payload.resposta || "", followups: payload.followups || [], raw: payload });
+    }
 
     if (!candidates || candidates.length === 0) {
       const isImobIntent = isRealEstateIntent(msgNorm);
