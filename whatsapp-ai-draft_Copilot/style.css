@@ -87,3 +87,86 @@
   float: right;
   font-size: 13px;
 }
+
+/* HERO.IA License Info Button & Popup */
+#heroia-info-wrapper {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0 8px;
+  position: relative;
+  flex-shrink: 0;
+}
+
+#heroia-info-btn {
+  width: 46px;
+  height: 46px;
+  border-radius: 50%;
+  background: #eaf2ff;
+  border: 2px solid #1f4fd8;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+  flex-shrink: 0;
+}
+
+#heroia-info-btn:hover {
+  transform: scale(1.08);
+  box-shadow: 0 0 14px rgba(31, 79, 216, 0.5);
+}
+
+#heroia-info-btn img {
+  width: 28px;
+  height: 28px;
+}
+
+#heroia-info-popup {
+  position: absolute;
+  bottom: 60px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 300px;
+  background: #eef5ff;
+  border: 2px solid #1f4fd8;
+  border-radius: 14px;
+  padding: 14px;
+  padding-top: 30px;
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.18);
+  z-index: 99999;
+  font-size: 13px;
+  box-sizing: border-box;
+}
+
+.heroia-hidden {
+  display: none;
+}
+
+.heroia-info-header {
+  font-weight: bold;
+  margin-bottom: 10px;
+  text-align: center;
+  color: #1f4fd8;
+}
+
+.heroia-info-line {
+  margin-bottom: 6px;
+  word-break: break-all;
+}
+
+#heroia-info-close {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 26px;
+  height: 26px;
+  background: #1f4fd8;
+  color: #fff;
+  border: none;
+  border-radius: 50%;
+  padding: 0;
+  cursor: pointer;
+  font-size: 14px;
+  line-height: 26px;
+}

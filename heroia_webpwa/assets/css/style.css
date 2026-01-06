@@ -42,6 +42,78 @@ header h1 {
 }
 header p { margin: 0; color: var(--muted); }
 
+.license-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  border-radius: 999px;
+  background: #fff4e5;
+  color: #8b5a1a;
+  font-weight: 700;
+  font-size: 13px;
+  border: 1px solid rgba(255, 174, 94, 0.4);
+  margin-top: 8px;
+}
+.license-pill.success { background: #e8f8ee; color: #1c6b3f; border-color: rgba(52, 168, 83, 0.35); }
+.license-pill.danger { background: #fff0f0; color: #a83232; border-color: rgba(199, 56, 56, 0.3); }
+
+.license-card {
+  margin-top: 20px;
+  padding: 18px;
+  border-radius: var(--radius);
+  border: 1px solid rgba(48, 111, 214, 0.12);
+  background: linear-gradient(135deg, rgba(220, 236, 255, 0.55), rgba(255, 255, 255, 0.9));
+  box-shadow: var(--shadow);
+}
+.license-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; }
+.license-head h2 { margin: 4px 0; letter-spacing: -0.02em; }
+.eyebrow { margin: 0; text-transform: uppercase; letter-spacing: 0.08em; font-size: 12px; color: var(--muted); }
+.muted { color: var(--muted); margin: 0; }
+.device-box {
+  background: #0f1f3a;
+  color: #e5edff;
+  padding: 12px 14px;
+  border-radius: 12px;
+  display: grid;
+  gap: 4px;
+  min-width: 240px;
+}
+.device-box code { background: rgba(255, 255, 255, 0.08); padding: 6px 8px; border-radius: 8px; color: #e5edff; }
+.device-box button { width: fit-content; justify-self: end; }
+
+.license-form {
+  margin-top: 14px;
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+}
+.license-form label { display: grid; gap: 6px; color: #1d2a3a; font-weight: 600; }
+.license-form input {
+  padding: 12px;
+  border-radius: 12px;
+  border: 1px solid #c9d8ef;
+  background: #f7f9fc;
+  font-size: 14px;
+}
+.license-actions {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.license-actions button { background: linear-gradient(135deg, #0ea5e9, #2563eb); color: #f8fbff; }
+.license-actions .status { font-size: 14px; }
+
+.ghost {
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  color: #e5edff;
+  padding: 6px 10px;
+  box-shadow: none;
+}
+
 .inputs { margin-top: 20px; display: grid; gap: 12px; }
 textarea {
   width: 100%;

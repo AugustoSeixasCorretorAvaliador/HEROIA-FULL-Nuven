@@ -3,8 +3,9 @@ import express from "express";
 import cors from "cors";
 import OpenAI from "openai";
 import fs from "fs";
-import { buildCopilotPrompt } from "./prompt-copilot.js";
-import { buildPromptForMessage } from "./prompt-draft.js";
+import { createClient } from "@supabase/supabase-js";
+import { buildCopilotPrompt } from "./backend/prompt-copilot.js";
+import { buildPromptForMessage } from "./backend/prompt-draft.js";
 
 const app = express();
 app.use(cors());
@@ -14,7 +15,7 @@ const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 const PORT = Number(process.env.PORT || 3002);
 const MAX_MESSAGES = 20;
 const MAX_TOTAL_CHARS = 6000;
-const APP_REQUIRE_LICENSE = String(process.env.APP_REQUIRE_LICENSE || "false").toLowerCase() === "true";
+const APP_REQUIRE_LICENSE = String(process.env.APP_REQUIRE_LICENSE || "true").toLowerCase() === "true";
 
 // ===============================
 // Assinatura
@@ -38,51 +39,107 @@ function maskKey(key = "") {
 }
 
 // ===============================
-// Licenças
+// Supabase / Licenciamento
 // ===============================
-const LICENSES_PATH = "./data/licenses.json";
-let licenses = [];
+const SUPABASE_URL = process.env.SUPABASE_URL;
+const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
+const supabase = SUPABASE_URL && SUPABASE_SERVICE_ROLE_KEY ? createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY) : null;
 
-function loadLicenses() {
-  try {
-    if (!fs.existsSync(LICENSES_PATH)) fs.writeFileSync(LICENSES_PATH, "[]", "utf-8");
-    const raw = fs.readFileSync(LICENSES_PATH, "utf-8");
-    const parsed = JSON.parse(raw || "[]");
-    licenses = Array.isArray(parsed) ? parsed : [];
-  } catch (err) {
-    console.error("Erro ao carregar licenses.json:", err.message);
-    licenses = [];
+function requireSupabaseReady() {
+  if (!supabase) {
+    throw new Error("Supabase não configurado. Defina SUPABASE_URL e SUPABASE_SERVICE_ROLE_KEY.");
   }
 }
 
-function persistLicenses() {
-  try {
-    fs.writeFileSync(LICENSES_PATH, JSON.stringify(licenses, null, 2), "utf-8");
-  } catch (err) {
-    console.error("Erro ao salvar licenses.json:", err.message);
-  }
+function normalizeLicense(row = {}) {
+  return {
+    id: row.id,
+    key: row.license_key || row.user_key,
+    keyColumn: row.license_key ? "license_key" : row.user_key ? "user_key" : "id",
+    status: row.status,
+    deviceId: row.device_id || row.deviceId || row.bound_device_id || null,
+    email: row.email || row.user_email || null,
+    expiresAt: row.expires_at || row.expiresAt || null,
+    maxDevices: row.max_devices || row.maxDevices || 1
+  };
 }
 
-export function validateLicense(userKey) {
-  if (!userKey || typeof userKey !== "string") return { ok: false, message: "Licença não informada." };
-  const license = licenses.find((l) => l.userKey === userKey);
-  if (!license) return { ok: false, message: "Licença não encontrada." };
-  if (license.status !== "active") return { ok: false, message: "Licença inativa. Entre em contato com o suporte." };
-  license.lastUsed = new Date().toISOString();
-  persistLicenses();
-  return { ok: true, license };
+async function fetchLicense(licenseKey) {
+  if (!licenseKey) return null;
+  requireSupabaseReady();
+
+  let query = supabase.from("licenses").select("*").eq("license_key", licenseKey).maybeSingle();
+  let { data, error } = await query;
+
+  if (error && error.code !== "PGRST116") throw error;
+  if (data) return normalizeLicense(data);
+
+  ({ data, error } = await supabase.from("licenses").select("*").eq("user_key", licenseKey).maybeSingle());
+  if (error && error.code !== "PGRST116") throw error;
+  return data ? normalizeLicense(data) : null;
 }
 
-function licenseMiddleware(req, res, next) {
+function isExpired(expiresAt) {
+  if (!expiresAt) return false;
+  const exp = new Date(expiresAt).getTime();
+  if (Number.isNaN(exp)) return false;
+  return exp < Date.now();
+}
+
+async function licenseMiddleware(req, res, next) {
   if (!APP_REQUIRE_LICENSE) return next();
-  const userKey = req.header("x-user-key");
-  console.log("[license] key:", maskKey(userKey), "total:", licenses.length);
-  const result = validateLicense(userKey);
-  if (!result.ok) return res.status(403).json({ error: result.message });
-  next();
-}
 
-loadLicenses();
+  const licenseKey = req.header("x-license-key");
+  const deviceId = req.header("x-device-id");
+  if (!licenseKey || !deviceId) {
+    return res.status(400).json({ error: "Headers x-license-key e x-device-id são obrigatórios" });
+  }
+
+  try {
+    const license = await fetchLicense(licenseKey);
+    console.log("[license] key:", maskKey(licenseKey), "device:", maskKey(deviceId));
+
+    if (!license) return res.status(403).json({ error: "Licença não encontrada" });
+    if (license.status === "blocked") return res.status(403).json({ error: "Licença bloqueada" });
+    if (isExpired(license.expiresAt)) return res.status(403).json({ error: "Licença expirada" });
+    if (license.deviceId && license.deviceId !== deviceId) {
+      console.warn("[licenseMiddleware] device mismatch", { key: maskKey(licenseKey), bound: maskKey(license.deviceId), incoming: maskKey(deviceId) });
+      return res.status(403).json({ error: "Licença já vinculada a outro dispositivo" });
+    }
+    // single-device enforcement even without bound device: block if there is activation history for another device
+    if (!license.deviceId && (license.maxDevices ?? 1) <= 1) {
+      try {
+        const { data: otherAct } = await supabase
+          .from("license_activations")
+          .select("device_id")
+          .eq("license_key", licenseKey)
+          .neq("device_id", deviceId)
+          .limit(1)
+          .maybeSingle();
+        if (otherAct?.device_id) {
+          console.warn("[licenseMiddleware] bloqueado por histórico de outro device", { key: maskKey(licenseKey), otherDevice: maskKey(otherAct.device_id), incoming: maskKey(deviceId) });
+          return res.status(403).json({ error: "Licença já vinculada a outro dispositivo" });
+        }
+      } catch (histErr) {
+        console.error("[licenseMiddleware] falha ao verificar histórico de devices:", histErr);
+      }
+    }
+    if (license.status !== "active") {
+      return res.status(403).json({ error: "Licença não ativada. Ative antes de usar." });
+    }
+
+    req.license = {
+      id: license.id,
+      key: license.key,
+      deviceId,
+      expiresAt: license.expiresAt
+    };
+    return next();
+  } catch (err) {
+    console.error("Erro ao validar licença:", err?.message || err);
+    return res.status(500).json({ error: "Falha na validação da licença" });
+  }
+}
 
 // ===============================
 // Base de empreendimentos
@@ -462,31 +519,100 @@ function shouldAppendSignature({ mode, userText, aiText }) {
 // ===============================
 // Rotas
 // ===============================
-app.get("/health", (_req, res) => res.json({ ok: true }));
+app.get("/health", (_req, res) => res.json({ ok: true, license: APP_REQUIRE_LICENSE }));
 
-app.post("/whatsapp/copilot", licenseMiddleware, async (req, res) => {
+app.post("/api/license/activate", async (req, res) => {
+  const { license_key, email, device_id } = req.body || {};
+
+
+  if (!license_key || !email || !device_id) {
+    return res.status(400).json({ error: "license_key, email e device_id são obrigatórios" });
+  }
+
+
   try {
-    const normalized = normalizeCopilotMessages(req.body?.messages);
-    if (!normalized.length) return res.status(400).json({ error: "Mensagens inválidas." });
+    const license = await fetchLicense(license_key);
+    if (!license) return res.status(404).json({ error: "Licença não encontrada" });
+    if (license.status === "blocked") return res.status(403).json({ error: "Licença bloqueada" });
+    if (isExpired(license.expiresAt)) return res.status(403).json({ error: "Licença expirada" });
 
-    const { system, user } = buildCopilotPrompt(normalized);
-    const completion = await openai.chat.completions.create({
-      model: process.env.OPENAI_MODEL || "gpt-4o-mini",
-      temperature: 0.2,
-      messages: [
-        { role: "system", content: system },
-        { role: "user", content: user }
-      ]
-    });
+    const now = new Date().toISOString();
+    const isTransfer = license.deviceId && license.deviceId !== device_id;
+    if (isTransfer) {
+      console.warn("[activate] transfer requested", { key: maskKey(license_key), from: maskKey(license.deviceId), to: maskKey(device_id) });
+    }
 
-    const draft = completion.choices?.[0]?.message?.content?.trim();
-    if (!draft) return res.status(500).json({ error: "Não consegui gerar o rascunho." });
+    const blockOtherActivations = async () => {
+      try {
+        await supabase
+          .from("license_activations")
+          .update({ user_status: 'blocked', last_seen_at: now })
+          .eq("license_key", license_key)
+          .neq("device_id", device_id);
+        console.log("[activate] outras ativações bloqueadas", { key: maskKey(license_key), keep: maskKey(device_id) });
+      } catch (errBlock) {
+        console.error("[activate] falha ao bloquear ativações antigas:", errBlock);
+      }
+    };
 
-    const parsed = parseCopilotResponse(draft);
-    return res.json({ analysis: parsed.analysis, suggestion: parsed.suggestion, draft: parsed.suggestion || draft, raw: draft });
+    const upsertActivation = async () => {
+      await supabase
+        .from("license_activations")
+        .upsert({
+          license_key,
+          device_id,
+          email,
+          source: req.body.source || "unknown",
+          activated_at: now,
+          last_seen_at: now,
+          user_agent: req.headers["user-agent"] || null,
+          user_status: 'active'
+        }, { onConflict: "license_key,device_id" });
+      console.log("[activate] activation upserted", { key: maskKey(license_key), device: maskKey(device_id) });
+    };
+
+    if (license.status === "active") {
+      if (!license.deviceId || isTransfer) {
+        await supabase
+          .from("licenses")
+          .update({ device_id, last_used: now })
+          .eq(license.keyColumn || "license_key", license.key || license_key);
+        console.log("[activate] bound device to active license", { key: maskKey(license_key), device: maskKey(device_id), transfer: isTransfer });
+      }
+      await blockOtherActivations();
+      await upsertActivation();
+      return res.json({ status: "active", expires_at: license.expiresAt || null });
+    }
+
+    requireSupabaseReady();
+    const { data, error } = await supabase
+      .from("licenses")
+      .update({
+        status: "active",
+        email,
+        device_id,
+        activated_at: now,
+        last_used: now
+      })
+      .eq(license.keyColumn || "license_key", license.key || license_key)
+      .select("*")
+      .maybeSingle();
+
+    if (error) {
+      console.error("[activate] update failed:", error);
+      return res.status(500).json({ error: "Erro ao ativar licença", detail: error.message || error });
+    }
+
+    const updated = normalizeLicense(data);
+    console.log("[activate] licença atualizada com sucesso:", { id: updated.id, key: maskKey(updated.key), deviceId: maskKey(updated.deviceId) });
+
+    await blockOtherActivations();
+    await upsertActivation();
+
+    return res.json({ status: "active", expires_at: updated.expiresAt || null });
   } catch (err) {
-    console.error("/whatsapp/copilot error", err?.response?.data || err.message || err);
-    return res.status(500).json({ error: "Falha ao processar." });
+    console.error("/api/license/activate error", err?.message || err);
+    return res.status(500).json({ error: "Erro ao processar ativação" });
   }
 });
 
