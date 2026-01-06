@@ -4,8 +4,8 @@ import cors from "cors";
 import OpenAI from "openai";
 import fs from "fs";
 import { createClient } from "@supabase/supabase-js";
-import { buildCopilotPrompt } from "./backend/prompt-copilot.js";
-import { buildPromptForMessage } from "./backend/prompt-draft.js";
+import { buildCopilotPrompt } from "./prompt-copilot.js";
+import { buildPromptForMessage } from "./prompt-draft.js";
 
 const app = express();
 app.use(cors());
@@ -520,6 +520,32 @@ function shouldAppendSignature({ mode, userText, aiText }) {
 // Rotas
 // ===============================
 app.get("/health", (_req, res) => res.json({ ok: true, license: APP_REQUIRE_LICENSE }));
+
+app.post("/whatsapp/copilot", licenseMiddleware, async (req, res) => {
+  try {
+    const normalized = normalizeCopilotMessages(req.body?.messages);
+    if (!normalized.length) return res.status(400).json({ error: "Mensagens inválidas." });
+
+    const { system, user } = buildCopilotPrompt(normalized);
+    const completion = await openai.chat.completions.create({
+      model: process.env.OPENAI_MODEL || "gpt-4o-mini",
+      temperature: 0.2,
+      messages: [
+        { role: "system", content: system },
+        { role: "user", content: user }
+      ]
+    });
+
+    const draft = completion.choices?.[0]?.message?.content?.trim();
+    if (!draft) return res.status(500).json({ error: "Não consegui gerar o rascunho." });
+
+    const parsed = parseCopilotResponse(draft);
+    return res.json({ analysis: parsed.analysis, suggestion: parsed.suggestion, draft: parsed.suggestion || draft, raw: draft });
+  } catch (err) {
+    console.error("/whatsapp/copilot error", err?.response?.data || err.message || err);
+    return res.status(500).json({ error: "Falha ao processar." });
+  }
+});
 
 app.post("/api/license/activate", async (req, res) => {
   const { license_key, email, device_id } = req.body || {};
