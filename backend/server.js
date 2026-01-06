@@ -598,7 +598,7 @@ app.post("/admin/license", async (req, res) => {
       .from("licenses")
       .update({ status: action })
       .or(`license_key.eq.${providedKey},user_key.eq.${providedKey}`)
-      .select("id, license_key, user_key, status")
+      .select("license_key, user_key, status")
       .maybeSingle();
 
     if (updErr) {
