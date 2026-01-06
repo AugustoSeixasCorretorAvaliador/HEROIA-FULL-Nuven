@@ -2,19 +2,26 @@
 <html lang="pt-br">
 <head>
   <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="theme-color" content="#0E2A47" />
   <title>HERO.IA — Admin Licenças</title>
+  <link rel="manifest" href="manifest.json" />
+  <link rel="icon" href="assets/css/img/icon128.png" sizes="128x128" />
+  <link rel="icon" href="assets/css/img/icon192.png" sizes="192x192" />
+  <link rel="apple-touch-icon" href="assets/css/img/icon192.png" />
   <style>
     body {
       font-family: Arial, sans-serif;
       background: #f2f6ff;
-      padding: 40px;
+      padding: 24px 14px 32px;
     }
     .box {
       background: #fff;
       padding: 24px;
       border-radius: 12px;
-      max-width: 460px;
-      margin: auto;
+      max-width: 520px;
+      width: 100%;
+      margin: 0 auto;
       box-shadow: 0 10px 25px rgba(0,0,0,0.15);
     }
     input, button {
@@ -41,7 +48,7 @@
 
   <input id="licenseKey" placeholder="Insira a License Key 🔑" />
   <input id="adminToken" placeholder="Token admin" value="heroia_app_admin" />
-  <div class="muted">Endpoint: POST /admin/license — backend porta 3002 (mesma do server)</div>
+  <div class="muted">Endpoint: POST /admin/license — use o mesmo host do backend (Render/produção) ou localhost na máquina do backend.</div>
 
   <button class="active" onclick="updateLicense('active')">Ativar</button>
   <button class="blocked" onclick="updateLicense('blocked')">Bloquear</button>
@@ -50,7 +57,7 @@
 </div>
 
 <script>
-  const API_URL = "http://localhost:3002/admin/license";
+  const API_URL = (window.ADMIN_API_URL || `${window.location.origin}/admin/license`).replace(/\/$/, "") + "/admin/license";
 
   async function updateLicense(action) {
     const license_key = document.getElementById("licenseKey").value.trim();
