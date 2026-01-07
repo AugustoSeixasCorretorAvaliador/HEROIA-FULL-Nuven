@@ -21,14 +21,13 @@ const APP_REQUIRE_LICENSE = String(process.env.APP_REQUIRE_LICENSE || "true").to
 // Assinatura
 // ===============================
 const APPEND_SIGNATURE = String(process.env.APPEND_SIGNATURE || "true").toLowerCase() === "true";
-const DEFAULT_SIGNATURE = `👨🏻‍💼 Augusto Seixas
+const DEFAULT_SIGNATURE = `👨🏻‍💼 HERO.IA Copiloto
 🏠 Corretor de Imóveis
-🎯 Spin Vendas
 🎯 Compra • Venda • Aluguel
-📋 CRECI-RJ: 105921
-📲 (21) 98565-3880
-📧 augusto.seixas@spinvendas.com
-🌐 www.spinimoveis.com`;
+📋 CRECI-RJ: XXXXX
+📲 (21) XXXXX-XXXX
+📧 HEROIA@Copiloto.com
+🌐 https://augustoseixascorretoravaliador.github.io/HERO.IA/`;
 const SIGNATURE = (process.env.SIGNATURE || DEFAULT_SIGNATURE).replace(/\\n/g, "\n");
 const APPEND_SIGNATURE_MODE = String(process.env.APPEND_SIGNATURE_MODE || "closing").toLowerCase();
 
@@ -367,7 +366,7 @@ function buildSellingPayload() {
 
 async function buildSmalltalkPayload({ msg = "", msgNorm = "" } = {}) {
   const system = [
-    "Você é Augusto Seixas- Corretor Spin, corretor consultivo em Niterói e Região Oceânica.",
+    "Você é HERO.IA Copiloto- Corretor de Imóveis, corretor consultivo em Niterói e Região Oceânica.",
     "Pode conversar sobre qualquer assunto com empatia e brevidade (máx 2 frases).",
     "Nunca sugira ou invente empreendimentos, bairros, tipologias, metragens ou datas.",
     "Se o usuário pedir imóveis, peça o nome do empreendimento ou o bairro e a tipologia (ex: studio, 2q, 3q, 4q, lote) e avise que só trabalha com os empreendimentos da base fornecida.",
@@ -810,9 +809,9 @@ const draftHandler = async (req, res) => {
 
     function removeAISignature(text) {
       const signaturePatterns = [
-        /👨🏻‍💼\s*Augusto Seixas/g,
+        /👨🏻‍💼\s*HERO.IA Copiloto/g,
         /🏠\s*Corretor de Imóveis/g,
-        /🎯\s*Spin Vendas/g,
+        /🎯\s*HERO.IA Copiloto Vendas/g,
         /🎯\s*Compra.*?Aluguel/g,
         /📋\s*CRECI-RJ:\s*\d+/g,
         /📲\s*\(\d+\)\s*\d+-\d+/g,
