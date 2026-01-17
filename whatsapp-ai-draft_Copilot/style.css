@@ -128,8 +128,8 @@
   left: 50%;
   transform: translateX(-50%);
   width: 300px;
-  background: #7c3aed;
-  border: 2px solid #7c3aed;
+  background: #ffffff;
+  border: 2px solid #0b1b2b;
   border-radius: 14px;
   padding: 14px;
   padding-top: 30px;
@@ -137,7 +137,7 @@
   z-index: 99999;
   font-size: 13px;
   box-sizing: border-box;
-  color: #fff;
+  color: #000;
 }
 
 .heroia-hidden {
@@ -149,13 +149,13 @@
   font-weight: bold;
   margin-bottom: 10px;
   text-align: center;
-  color: #fff;
+  color: #000;
 }
 
 .heroia-info-line {
   margin-bottom: 6px;
   word-break: break-all;
-  color: #fff;
+  color: #000;
 }
 
 #heroia-info-close {
@@ -164,9 +164,9 @@
   right: 8px;
   width: 26px;
   height: 26px;
-  background: #7c3aed;
-  color: #fff;
-  border: none;
+  background: #ffffff;
+  color: #000;
+  border: 1px solid #000;
   border-radius: 50%;
   padding: 0;
   cursor: pointer;

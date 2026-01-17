@@ -5,7 +5,7 @@ function applyInfoStyles() {
     .map(sel => document.querySelector(sel))
     .filter(Boolean)
     .forEach(el => {
-      el.style.color = '#0b1b2b';
+      el.style.color = '#000';
       el.style.opacity = 1;
     });
 }
