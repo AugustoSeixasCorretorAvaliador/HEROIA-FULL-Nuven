@@ -630,6 +630,68 @@ app.post("/admin/license", async (req, res) => {
   }
 });
 
+// Endpoint para adicionar empreendimento
+app.post("/admin/empreendimento", async (req, res) => {
+  const { token, ...empreendimento } = req.body || {};
+
+  if (token !== ADMIN_TOKEN) {
+    return res.status(403).json({ error: "Acesso negado" });
+  }
+
+  // Validação dos campos obrigatórios
+  if (!empreendimento.nome || !empreendimento.bairro || 
+      !empreendimento.tipologia || !empreendimento.perfil || 
+      !empreendimento.descricao) {
+    return res.status(400).json({ error: "Campos obrigatórios faltando" });
+  }
+
+  try {
+    const filePath = "./data/empreendimentos.json";
+    
+    // Lê o arquivo atual
+    let empreendimentos = [];
+    try {
+      const fileContent = fs.readFileSync(filePath, "utf8");
+      empreendimentos = JSON.parse(fileContent);
+    } catch (err) {
+      console.error("Erro ao ler empreendimentos.json:", err);
+      return res.status(500).json({ error: "Erro ao ler arquivo de empreendimentos" });
+    }
+
+    // Verifica se o nome já existe (normalizado)
+    const nomeNormalizado = empreendimento.nome.trim().toLowerCase();
+    const existente = empreendimentos.some(emp => 
+      emp.nome.toLowerCase() === nomeNormalizado
+    );
+
+    if (existente) {
+      return res.status(409).json({ error: "Já existe um empreendimento com este nome" });
+    }
+
+    // Adiciona o novo empreendimento
+    empreendimentos.push(empreendimento);
+
+    // Salva o arquivo atualizado
+    try {
+      fs.writeFileSync(filePath, JSON.stringify(empreendimentos, null, 2), "utf8");
+      console.log(`[admin] Empreendimento "${empreendimento.nome}" adicionado com sucesso`);
+    } catch (err) {
+      console.error("Erro ao salvar empreendimentos.json:", err);
+      return res.status(500).json({ error: "Erro ao salvar arquivo de empreendimentos" });
+    }
+
+    return res.json({ 
+      ok: true, 
+      message: "Empreendimento adicionado com sucesso",
+      empreendimento 
+    });
+
+  } catch (err) {
+    console.error("[admin] erro ao adicionar empreendimento:", err?.message || err);
+    return res.status(500).json({ error: "Erro interno" });
+  }
+});
+
 app.post("/whatsapp/copilot", licenseMiddleware, async (req, res) => {
   try {
     const normalized = normalizeCopilotMessages(req.body?.messages);
