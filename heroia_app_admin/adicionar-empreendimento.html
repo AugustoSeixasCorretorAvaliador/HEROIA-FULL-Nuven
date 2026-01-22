@@ -410,27 +410,11 @@
   // Carrega empreendimentos existentes
   async function loadEmpreendimentos() {
     addLog('Carregando lista de empreendimentos...', 'info');
-    try {
-      const response = await fetch('../../backend/data/empreendimentos.json');
-      if (!response.ok) throw new Error('Erro ao carregar empreendimentos');
-      const data = await response.json();
-      addLog(`${data.length} empreendimentos carregados`, 'success');
-      return data;
-    } catch (error) {
-      console.error('Erro ao carregar empreendimentos:', error);
-      addLog('Tentando caminho alternativo...', 'warning');
-      // Tenta carregar do caminho relativo alternativo
-      try {
-        const response = await fetch('../data/empreendimentos.json');
-        if (!response.ok) throw new Error('Erro ao carregar empreendimentos');
-        const data = await response.json();
-        addLog(`${data.length} empreendimentos carregados (caminho alternativo)`, 'success');
-        return data;
-      } catch (err) {
-        addLog(`Erro ao carregar empreendimentos: ${err.message}`, 'error');
-        return [];
-      }
-    }
+    
+    // Como estamos usando o backend remoto, não precisamos carregar localmente
+    // O backend já faz a validação de nome duplicado
+    addLog('Validação será feita no servidor', 'info');
+    return [];
   }
 
   // Valida se o nome já existe
@@ -469,15 +453,8 @@
     addLog(`Nome: ${nome}`, 'info');
     addLog(`Bairro: ${bairro}`, 'info');
 
-    // Valida nome único
-    addLog('Validando se o nome já existe...', 'info');
-    const isNomeValido = await validateNome(nome);
-    if (!isNomeValido) {
-      addLog('⚠️ Nome duplicado detectado!', 'warning');
-      showResult('⚠️ Já existe um empreendimento com este nome. Por favor, escolha outro nome.', 'warning');
-      return;
-    }
-    addLog('✓ Nome válido (não duplicado)', 'success');
+    // Valida nome único (delegado ao servidor)
+    addLog('Validação de nome será feita no servidor', 'info');
 
     // Coleta tipologias selecionadas
     const tipologiaCheckboxes = document.querySelectorAll('#tipologiaGroup input[type="checkbox"]:checked');
