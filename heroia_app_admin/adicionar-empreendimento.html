@@ -170,6 +170,63 @@
       color: #718096;
       margin-top: 4px;
     }
+    /* Log de Atualização */
+    .log-container {
+      margin-top: 24px;
+      background: #1a202c;
+      border-radius: 8px;
+      padding: 16px;
+      font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+      font-size: 13px;
+      max-height: 400px;
+      overflow-y: auto;
+      display: none;
+    }
+    .log-container.active {
+      display: block;
+    }
+    .log-header {
+      color: #48bb78;
+      font-weight: bold;
+      border-bottom: 1px solid #2d3748;
+      padding-bottom: 8px;
+      margin-bottom: 12px;
+    }
+    .log-entry {
+      color: #e2e8f0;
+      margin-bottom: 4px;
+      line-height: 1.6;
+    }
+    .log-entry.success {
+      color: #48bb78;
+    }
+    .log-entry.error {
+      color: #fc8181;
+    }
+    .log-entry.warning {
+      color: #f6ad55;
+    }
+    .log-entry.info {
+      color: #63b3ed;
+    }
+    .log-timestamp {
+      color: #718096;
+      margin-right: 8px;
+    }
+    .btn-clear-log {
+      background: #2d3748;
+      color: #e2e8f0;
+      border: 1px solid #4a5568;
+      padding: 6px 12px;
+      font-size: 12px;
+      border-radius: 4px;
+      cursor: pointer;
+      float: right;
+      margin-top: -4px;
+    }
+    .btn-clear-log:hover {
+      background: #4a5568;
+    }
   </style>
 </head>
 <body>
@@ -276,15 +333,65 @@
   </form>
 
   <div class="result" id="result"></div>
+
+  <!-- Log de Atualização -->
+  <div class="log-container" id="logContainer">
+    <div class="log-header">
+      📋 LOG DE ATUALIZAÇÃO - CADASTRO DE EMPREENDIMENTOS
+      <button class="btn-clear-log" onclick="clearLog()">Limpar Log</button>
+    </div>
+    <div id="logEntries"></div>
+  </div>
 </div>
 
 <script>
+  // =====================================================
+  // Sistema de Log
+  // =====================================================
+  const logContainer = document.getElementById('logContainer');
+  const logEntries = document.getElementById('logEntries');
+
+  function addLog(message, type = 'info') {
+    // Mostra o container se estiver escondido
+    logContainer.classList.add('active');
+
+    // Cria timestamp
+    const now = new Date();
+    const timestamp = `[${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}:${now.getSeconds().toString().padStart(2, '0')}]`;
+    
+    // Cria entrada de log
+    const entry = document.createElement('div');
+    entry.className = `log-entry ${type}`;
+    entry.innerHTML = `<span class="log-timestamp">${timestamp}</span>${message}`;
+    
+    // Adiciona ao container
+    logEntries.appendChild(entry);
+    
+    // Scroll automático para o final
+    logContainer.scrollTop = logContainer.scrollHeight;
+    
+    // Log no console também
+    console.log(`${timestamp} [${type.toUpperCase()}] ${message}`);
+  }
+
+  function clearLog() {
+    logEntries.innerHTML = '';
+    addLog('Log limpo', 'info');
+  }
+
+  // =====================================================
+  // Inicialização
+  // =====================================================
+  addLog('Sistema iniciado', 'success');
+  
   // Inicializa URL do backend
   const apiBaseInput = document.getElementById('apiBase');
   const DEFAULT_API_BASE = 'https://heroia-full-nuven-1.onrender.com';
   const storedBase = localStorage.getItem('admin_api_base') || '';
   const initialBase = (storedBase || DEFAULT_API_BASE || '').replace(/\/$/, '');
   apiBaseInput.value = initialBase;
+  
+  addLog(`Backend configurado: ${initialBase}`, 'info');
 
   // Controle do campo de entrega
   const entregaCheck = document.getElementById('entregaCheck');
@@ -302,18 +409,25 @@
 
   // Carrega empreendimentos existentes
   async function loadEmpreendimentos() {
+    addLog('Carregando lista de empreendimentos...', 'info');
     try {
       const response = await fetch('../../backend/data/empreendimentos.json');
       if (!response.ok) throw new Error('Erro ao carregar empreendimentos');
-      return await response.json();
+      const data = await response.json();
+      addLog(`${data.length} empreendimentos carregados`, 'success');
+      return data;
     } catch (error) {
       console.error('Erro ao carregar empreendimentos:', error);
+      addLog('Tentando caminho alternativo...', 'warning');
       // Tenta carregar do caminho relativo alternativo
       try {
         const response = await fetch('../data/empreendimentos.json');
         if (!response.ok) throw new Error('Erro ao carregar empreendimentos');
-        return await response.json();
+        const data = await response.json();
+        addLog(`${data.length} empreendimentos carregados (caminho alternativo)`, 'success');
+        return data;
       } catch (err) {
+        addLog(`Erro ao carregar empreendimentos: ${err.message}`, 'error');
         return [];
       }
     }
@@ -344,38 +458,52 @@
   document.getElementById('empreendimentoForm').addEventListener('submit', async function(e) {
     e.preventDefault();
 
+    addLog('──────────────────────────────────────', 'info');
+    addLog('Iniciando cadastro de novo empreendimento...', 'info');
+
     // Coleta dados do formulário
     const nome = document.getElementById('nome').value.trim();
     const bairro = document.getElementById('bairro').value.trim();
     const descricao = document.getElementById('descricao').value.trim();
 
+    addLog(`Nome: ${nome}`, 'info');
+    addLog(`Bairro: ${bairro}`, 'info');
+
     // Valida nome único
+    addLog('Validando se o nome já existe...', 'info');
     const isNomeValido = await validateNome(nome);
     if (!isNomeValido) {
+      addLog('⚠️ Nome duplicado detectado!', 'warning');
       showResult('⚠️ Já existe um empreendimento com este nome. Por favor, escolha outro nome.', 'warning');
       return;
     }
+    addLog('✓ Nome válido (não duplicado)', 'success');
 
     // Coleta tipologias selecionadas
     const tipologiaCheckboxes = document.querySelectorAll('#tipologiaGroup input[type="checkbox"]:checked');
     const tipologia = Array.from(tipologiaCheckboxes).map(cb => cb.value);
 
     if (tipologia.length === 0) {
+      addLog('⚠️ Nenhuma tipologia selecionada', 'warning');
       showResult('⚠️ Selecione pelo menos uma tipologia.', 'warning');
       return;
     }
+    addLog(`Tipologias: ${tipologia.join(', ')}`, 'info');
 
     // Coleta perfis selecionados
     const perfilCheckboxes = document.querySelectorAll('#perfilGroup input[type="checkbox"]:checked');
     const perfil = Array.from(perfilCheckboxes).map(cb => cb.value);
 
     if (perfil.length === 0) {
+      addLog('⚠️ Nenhum perfil selecionado', 'warning');
       showResult('⚠️ Selecione pelo menos um perfil.', 'warning');
       return;
     }
+    addLog(`Perfis: ${perfil.join(', ')}`, 'info');
 
     // Define entrega
     const entrega = entregaCheck.checked ? 'Entregue' : entregaAno.value.trim() || 'A confirmar';
+    addLog(`Entrega: ${entrega}`, 'info');
 
     // Monta objeto do novo empreendimento
     const novoEmpreendimento = {
@@ -394,6 +522,9 @@
       
       const token = 'heroia_app_admin'; // Token admin padrão
 
+      addLog('Enviando para o servidor...', 'info');
+      addLog(`URL: ${apiBase}/admin/empreendimento`, 'info');
+
       const response = await fetch(`${apiBase}/admin/empreendimento`, {
         method: 'POST',
         headers: {
@@ -405,18 +536,28 @@
         })
       });
 
+      addLog(`Status HTTP: ${response.status} ${response.statusText}`, response.ok ? 'success' : 'error');
+
       const data = await response.json();
 
       if (!response.ok) {
         if (response.status === 409) {
+          addLog('⚠️ Empreendimento duplicado no servidor', 'warning');
           showResult('⚠️ Já existe um empreendimento com este nome no servidor.', 'warning');
+        } else if (response.status === 403) {
+          addLog('❌ Acesso negado - token inválido', 'error');
+          showResult('❌ Erro de autenticação. Token inválido.', 'error');
         } else {
+          addLog(`❌ Erro: ${data.error || 'Erro desconhecido'}`, 'error');
           throw new Error(data.error || 'Erro ao salvar empreendimento');
         }
         return;
       }
 
       console.log('Empreendimento salvo:', data);
+      addLog('✓ Empreendimento cadastrado com sucesso!', 'success');
+      addLog('✓ Arquivo empreendimentos.json atualizado no servidor', 'success');
+      addLog('Cadastro concluído com sucesso!', 'success');
       showResult('✅ Empreendimento adicionado com sucesso!', 'success');
       
       // Limpa o formulário após 2 segundos
@@ -425,10 +566,13 @@
         // Restaura checkboxes de perfil marcados
         document.getElementById('perfil_moradia').checked = true;
         document.getElementById('perfil_investimento').checked = true;
+        addLog('Formulário limpo e pronto para novo cadastro', 'info');
       }, 2000);
       
     } catch (error) {
       console.error('Erro ao salvar:', error);
+      addLog(`❌ ERRO ao adicionar empreendimento: ${error.message}`, 'error');
+      addLog('Detalhes: Verifique se o servidor está online e acessível', 'error');
       showResult(`❌ Erro ao adicionar empreendimento: ${error.message}`, 'error');
     }
   });
