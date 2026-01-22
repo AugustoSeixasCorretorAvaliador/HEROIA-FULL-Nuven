@@ -1881,5 +1881,20 @@
     ],
     "descricao": "Conviva | Rua Antonio Cotta, 28 | Entrega: 2028",
     "entrega": "2028"
+  },
+  {
+    "nome": "Serena",
+    "bairro": "Piratininga",
+    "tipologia": [
+      "2q",
+      "3q",
+      "4q"
+    ],
+    "perfil": [
+      "moradia",
+      "investimento"
+    ],
+    "descricao": "Esquina da Av. Alm Tamandaré com a Rua Jornalista F. R. de Miranda.",
+    "entrega": "2028"
   }
 ]
