@@ -386,7 +386,7 @@
   
   // Inicializa URL do backend
   const apiBaseInput = document.getElementById('apiBase');
-  const DEFAULT_API_BASE = 'https://heroia-full-nuven-1.onrender.com';
+  const DEFAULT_API_BASE = 'http://localhost:3002'; // Mudado para localhost
   const storedBase = localStorage.getItem('admin_api_base') || '';
   const initialBase = (storedBase || DEFAULT_API_BASE || '').replace(/\/$/, '');
   apiBaseInput.value = initialBase;
