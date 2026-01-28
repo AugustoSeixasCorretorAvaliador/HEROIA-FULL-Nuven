@@ -866,7 +866,32 @@ const draftHandler = async (req, res) => {
       }
     }
 
-    const prompt = buildPromptForMessage({ mensagem: safeMsg, empreendimentos: candidates });
+    // Tentar extrair nome do cliente explicitamente (saudações ou rótulos) para permitir nomes nominais
+    let clientName = null;
+    try {
+      const candidates = [];
+      const greetMatch = safeMsg.match(/(?:^|\n)\s*(?:oi|olá|ola|bom dia|boa tarde|boa noite)[,!\s]+([A-ZÀ-Ý][a-zà-ÿ\-]+)/i);
+      if (greetMatch && greetMatch[1]) candidates.push(greetMatch[1]);
+      const labelMatch = safeMsg.match(/^\s*([A-ZÀ-Ý][a-zà-ÿ\-]+):\s/m);
+      if (labelMatch && labelMatch[1]) candidates.push(labelMatch[1]);
+      const meMatch = safeMsg.match(/\b(?:me chamo|sou)\s+([A-ZÀ-Ý][a-zà-ÿ\-]+)\b/i);
+      if (meMatch && meMatch[1]) candidates.push(meMatch[1]);
+
+      const brokerNorm = (BROKER_NAME || "").toLowerCase();
+      for (const c of candidates) {
+        if (!c) continue;
+        const candNorm = String(c).toLowerCase();
+        if (brokerNorm && candNorm === brokerNorm) continue; // inválido se igual ao corretor
+        clientName = c;
+        break;
+      }
+    } catch (e) {
+      clientName = null;
+    }
+
+    const mensagemForPrompt = clientName ? `Nome do destinatário: ${clientName}\n${safeMsg}` : safeMsg;
+
+    const prompt = buildPromptForMessage({ mensagem: mensagemForPrompt, empreendimentos: candidates });
     let payload = null;
 
     try {
@@ -874,7 +899,7 @@ const draftHandler = async (req, res) => {
         model: process.env.OPENAI_MODEL || "gpt-4o-mini",
         input: [
           { role: "system", content: prompt },
-          { role: "user", content: safeMsg }
+          { role: "user", content: mensagemForPrompt }
         ],
         text: { format: "json" },
         max_output_tokens: 1500,
