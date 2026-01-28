@@ -869,16 +869,19 @@ const draftHandler = async (req, res) => {
     // Tentar extrair nome do cliente explicitamente (saudações ou rótulos) para permitir nomes nominais
     let clientName = null;
     try {
-      const candidates = [];
-      const greetMatch = safeMsg.match(/(?:^|\n)\s*(?:oi|olá|ola|bom dia|boa tarde|boa noite)[,!\s]+([A-ZÀ-Ý][a-zà-ÿ\-]+)/i);
-      if (greetMatch && greetMatch[1]) candidates.push(greetMatch[1]);
-      const labelMatch = safeMsg.match(/^\s*([A-ZÀ-Ý][a-zà-ÿ\-]+):\s/m);
-      if (labelMatch && labelMatch[1]) candidates.push(labelMatch[1]);
-      const meMatch = safeMsg.match(/\b(?:me chamo|sou)\s+([A-ZÀ-Ý][a-zà-ÿ\-]+)\b/i);
-      if (meMatch && meMatch[1]) candidates.push(meMatch[1]);
+      const nameCandidates = [];
+      // Saudações: capture nome após 'Olá,', 'Oi', etc. — suporta nomes simples ou compostos
+      const greetMatch = safeMsg.match(/(?:^|\n)\s*(?:oi|olá|ola|bom dia|boa tarde|boa noite)[,!\s]+([A-ZÀ-Ý][a-zà-ÿ\-]+(?:\s+[A-ZÀ-Ý][a-zà-ÿ\-]+)?)/i);
+      if (greetMatch && greetMatch[1]) nameCandidates.push(greetMatch[1].trim());
+      // Label style: 'Nome: ...' at line start
+      const labelMatch = safeMsg.match(/^\s*([A-ZÀ-Ý][a-zà-ÿ\-]+(?:\s+[A-ZÀ-Ý][a-zà-ÿ\-]+)?)\s*:\s/m);
+      if (labelMatch && labelMatch[1]) nameCandidates.push(labelMatch[1].trim());
+      // Self-identification: 'me chamo X' or 'sou X'
+      const meMatch = safeMsg.match(/\b(?:me chamo|sou)\s+([A-ZÀ-Ý][a-zà-ÿ\-]+(?:\s+[A-ZÀ-Ý][a-zà-ÿ\-]+)?)\b/i);
+      if (meMatch && meMatch[1]) nameCandidates.push(meMatch[1].trim());
 
       const brokerNorm = (BROKER_NAME || "").toLowerCase();
-      for (const c of candidates) {
+      for (const c of nameCandidates) {
         if (!c) continue;
         const candNorm = String(c).toLowerCase();
         if (brokerNorm && candNorm === brokerNorm) continue; // inválido se igual ao corretor
@@ -889,7 +892,10 @@ const draftHandler = async (req, res) => {
       clientName = null;
     }
 
-    const mensagemForPrompt = clientName ? `Nome do destinatário: ${clientName}\n${safeMsg}` : safeMsg;
+    // Se houver nome do cliente válido, prefixar saudação obrigatória para reforçar uso nominal
+    const mensagemForPrompt = clientName
+      ? `Olá, ${clientName}!\nNome do destinatário: ${clientName}\n${safeMsg}`
+      : safeMsg;
 
     const prompt = buildPromptForMessage({ mensagem: mensagemForPrompt, empreendimentos: candidates });
     let payload = null;
@@ -944,6 +950,53 @@ const draftHandler = async (req, res) => {
     if (!payload) payload = buildDeterministicPayload(candidates) || buildFallbackPayload({ msg, msgNorm });
 
     payload.resposta = removeAISignature(payload.resposta || "");
+
+    // Pós-processamento inline: se detectamos um nome de cliente válido, garantimos
+    // que a resposta comece com a saudação exata 'Olá, <Nome>!'. Preferimos não
+    // alterar o conteúdo além de prefixar a saudação quando necessário.
+    if (typeof payload.resposta === "string") {
+      // tenta usar clientName detectado anteriormente; se ausente, tente extrair do texto original
+      let finalClient = clientName;
+      if (!finalClient) {
+        try {
+          const gm = String(msg || "").match(/(?:^|\n)\s*(?:oi|olá|ola|bom dia|boa tarde|boa noite)[,!\s]+([A-ZÀ-Ý][a-zà-ÿ\-]+(?:\s+[A-ZÀ-Ý][a-zà-ÿ\-]+)?)/i);
+          if (gm && gm[1]) {
+            finalClient = gm[1].trim();
+          } else {
+            // Fallback robusto: pegue o trecho imediatamente após a saudação e extraia o primeiro token
+            const afterGreeting = String(msg || "").replace(/^[\s\S]*?(?:oi|olá|ola)[,!\s]*/i, "");
+            const firstTok = (afterGreeting || "").split(/[\s,!.?\n]/)[0];
+            if (firstTok && /^[A-ZÀ-Ý][a-zà-ÿ\-]+$/.test(firstTok) && String(firstTok).toLowerCase() !== (BROKER_NAME || "").toLowerCase()) {
+              finalClient = firstTok.trim();
+            } else {
+              // Varredura robusta: procure o primeiro token capitalizado plausível na mensagem
+              const tokenCandidates = String(msg || "").match(/[A-ZÀ-Ý][a-zà-ÿ\-]{2,}/g) || [];
+              for (const tk of tokenCandidates) {
+                const tl = String(tk).toLowerCase();
+                if (!tl) continue;
+                if (tl === (BROKER_NAME || "").toLowerCase()) continue;
+                if (["olá","ola","oi","bom","boa","notei","vi"].includes(tl)) continue;
+                finalClient = tk.trim();
+                break;
+              }
+            }
+          }
+        } catch (e) {
+          finalClient = null;
+        }
+      }
+
+      if (finalClient) {
+        const exactGreeting = `Olá, ${finalClient}!`;
+        const respTrim = String(payload.resposta || "").trim();
+        const escName = String(finalClient || "").replace(/[.*+?^${}()|[\\]\\]/g, "\\$&");
+        const greetingRegex = new RegExp(`^\\s*Olá[,!\\s]*${escName}[\\.!]*\\s*`, "i");
+        if (!respTrim.startsWith(exactGreeting)) {
+          const withoutGreeting = respTrim.replace(greetingRegex, "").trim();
+          payload.resposta = `${exactGreeting} ${withoutGreeting}`.trim();
+        }
+      }
+    }
 
     if (APPEND_SIGNATURE && typeof payload.resposta === "string") {
       const normalized = payload.resposta.trim();
