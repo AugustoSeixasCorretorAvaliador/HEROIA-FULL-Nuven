@@ -31,6 +31,9 @@ const DEFAULT_SIGNATURE = `👨🏻‍💼 HERO.IA Copiloto
 const SIGNATURE = (process.env.SIGNATURE || DEFAULT_SIGNATURE).replace(/\\n/g, "\n");
 const APPEND_SIGNATURE_MODE = String(process.env.APPEND_SIGNATURE_MODE || "closing").toLowerCase();
 
+// Extração simples do nome do corretor a partir da assinatura (usada para proteção inline)
+const BROKER_NAME = (process.env.SIGNATURE || "").split("\n")[0].replace(/[^A-Za-zÀ-ÿ\s]/g, "").trim();
+
 function maskKey(key = "") {
   if (typeof key !== "string" || key.length === 0) return "<empty>";
   if (key.length <= 6) return `${key[0]}***${key[key.length - 1]}`;
@@ -697,7 +700,18 @@ app.post("/whatsapp/copilot", licenseMiddleware, async (req, res) => {
     const normalized = normalizeCopilotMessages(req.body?.messages);
     if (!normalized.length) return res.status(400).json({ error: "Mensagens inválidas." });
 
-    const { system, user } = buildCopilotPrompt(normalized);
+    // Proteção inline: se um autor nas mensagens for igual ao nome do corretor, não repassar esse nome como cliente
+    const brokerNameNorm = (BROKER_NAME || "").toLowerCase();
+    const sanitizedMessages = normalized.map((m) => {
+      const author = (m.author || "").trim();
+      if (author && brokerNameNorm && author.toLowerCase() === brokerNameNorm) {
+        // substituir por label genérica para evitar vazar o nome do corretor como nome do cliente
+        return { ...m, author: "corretor" };
+      }
+      return m;
+    });
+
+    const { system, user } = buildCopilotPrompt(sanitizedMessages);
     const completion = await openai.chat.completions.create({
       model: process.env.OPENAI_MODEL || "gpt-4o-mini",
       temperature: 0.2,
@@ -840,7 +854,19 @@ const draftHandler = async (req, res) => {
       return res.json({ draft: payload.resposta || "", followups: payload.followups || [], raw: payload });
     }
 
-    const prompt = buildPromptForMessage({ mensagem: msg, empreendimentos: candidates });
+    // Proteção inline: não repassar o nome do corretor como nome do cliente no prompt
+    const brokerNameEsc = (BROKER_NAME || "").replace(/[.*+?^${}()|[\\]\\]/g, "\\$&");
+    let safeMsg = msg;
+    if (brokerNameEsc) {
+      try {
+        safeMsg = safeMsg.replace(new RegExp(`\\b${brokerNameEsc}\\b`, "gi"), "").trim();
+      } catch (e) {
+        // se regex falhar, apenas não alterar a mensagem
+        safeMsg = msg;
+      }
+    }
+
+    const prompt = buildPromptForMessage({ mensagem: safeMsg, empreendimentos: candidates });
     let payload = null;
 
     try {
@@ -848,7 +874,7 @@ const draftHandler = async (req, res) => {
         model: process.env.OPENAI_MODEL || "gpt-4o-mini",
         input: [
           { role: "system", content: prompt },
-          { role: "user", content: msg }
+          { role: "user", content: safeMsg }
         ],
         text: { format: "json" },
         max_output_tokens: 1500,
