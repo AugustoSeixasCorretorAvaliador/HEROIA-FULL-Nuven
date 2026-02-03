@@ -8,12 +8,66 @@ const BTN_ID_DRAFT = "heroia-draft-btn";
 const BTN_ID_COPILOT = "heroia-copilot-btn";
 const PANEL_ID = "heroia-analysis-panel";
 const TOOLBAR_ID = "heroia-toolbar";
+const REWRITE_PROMPT = "Sua tarefa é reescrever, lapidar e melhorar o texto abaixo.\nNão explique nada, não faça comentários, não adicione introduções.\nEntregue apenas a resposta final pronta para envio ao cliente.\nMantenha tom profissional, claro e estratégico, com linguagem adequada ao mercado imobiliário.\nNão cite empreendimentos, valores ou dados específicos, a menos que estejam explicitamente no texto original.\nTexto original: <<<TEXTO_DO_RASCUNHO>>>";
+const REWRITE_INSIGHTS = [
+  "Organizei num texto claro, profissional e fácil de entender, sem parecer pressão. Pronto para enviar no WhatsApp.",
+  "Por que funciona tão bem?",
+  "- Resolve o medo principal do cliente.",
+  "- Explica o processo sem bancês e traduz em benefícios práticos.",
+  "- Reposiciona você como consultor, não apenas vendedor.",
+  "- A lista de documentos passa credibilidade e seriedade.",
+  "- Antecipação de objeções sem confronto.",
+  "- Fechamento é leve (sem pressão)."
+].join("\n");
 
 const state = { loadingDraft: false, loadingCopilot: false };
 
 function getComposer() {
   return document.querySelector('footer [contenteditable="true"][role="textbox"]')
     || document.querySelector('div[contenteditable="true"][role="textbox"]');
+}
+
+function getComposerText() {
+  const editor = getComposer();
+  if (!editor) return "";
+  return (editor.innerText || editor.textContent || "").trim();
+}
+
+function selectComposerAll() {
+  const editor = getComposer();
+  if (!editor) return;
+  editor.focus();
+  const sel = window.getSelection && window.getSelection();
+  if (!sel) return;
+  sel.removeAllRanges();
+  const range = document.createRange();
+  range.selectNodeContents(editor);
+  sel.addRange(range);
+}
+
+function buildRewriteInsights(text) {
+  const t = (text || "").toLowerCase();
+  const bullets = [];
+  if (t.includes("fgts") || t.includes("financi")) bullets.push("Mostra claramente como usar FGTS e financiar sem surpresa.");
+  if (t.includes("parcela") || t.includes("prest")) bullets.push("Entrega a parcela exata e o teto de compra, reduzindo insegurança.");
+  if (t.includes("document")) bullets.push("Lista documentos e passa seriedade no processo.");
+  if (t.includes("seguran") || t.includes("tranqui")) bullets.push("Refuerça segurança e tranquilidade na decisão.");
+  if (!bullets.length) bullets.push("Texto lapidado para ficar claro, consultivo e sem pressão.");
+  return [
+    "Insights do texto lapidado:",
+    ...bullets.map((b) => `- ${b}`),
+    "Pronto para colar no WhatsApp."
+  ].join("\n");
+}
+
+function fixCommonTypos(text = "") {
+  const replacements = [
+    [/\bcertidao(es)?\b/gi, (m, plural) => plural ? "certidões" : "certidão"],
+    [/\baprovac\w*/gi, "aprovação"],
+    [/\bimovel\b/gi, "imóvel"],
+    [/\bimoveis\b/gi, "imóveis"],
+  ];
+  return replacements.reduce((acc, [re, val]) => acc.replace(re, val), text);
 }
 
 function createButton(id, label, className, onClick) {
@@ -82,24 +136,62 @@ function extractInboundMessages(limit = 3) {
   return inbound.slice(-limit).map((m) => m.text);
 }
 
-function insertTextInComposer(text) {
+function insertTextInComposer(text, { append = false } = {}) {
   const editor = getComposer();
   if (!editor) return false;
-  editor.focus();
-  editor.innerText = "";
-  const lines = (text || "").split("\n");
-  for (let i = 0; i < lines.length; i++) {
-    document.execCommand("insertText", false, lines[i]);
-    if (i < lines.length - 1) {
-      const evt = new KeyboardEvent("keydown", {
-        key: "Enter", code: "Enter", keyCode: 13, which: 13, shiftKey: true, bubbles: true, cancelable: true,
-      });
-      editor.dispatchEvent(evt);
-      document.execCommand("insertLineBreak");
-    }
-  }
-  editor.dispatchEvent(new Event("input", { bubbles: true }));
+  const safeText = String(text || "");
+
+  const existing = append ? (editor.innerText || editor.textContent || "") : "";
+  const separator = append ? "\n\n" : "";
+  const finalText = append ? `${existing.trimEnd()}${separator}${safeText}` : safeText;
+
+  editor.innerHTML = "";
+  const parts = finalText.split("\n");
+  parts.forEach((line, idx) => {
+    editor.appendChild(document.createTextNode(line));
+    if (idx < parts.length - 1) editor.appendChild(document.createElement("br"));
+  });
+
+  editor.dispatchEvent(new InputEvent("input", { bubbles: true, data: finalText, inputType: "insertFromPaste" }));
+  editor.dispatchEvent(new Event("change", { bubbles: true }));
   return true;
+}
+
+function isComposerFullySelected(currentText) {
+  const editor = getComposer();
+  if (!editor) return false;
+  const sel = window.getSelection && window.getSelection();
+  if (!sel || sel.rangeCount === 0) return false;
+  const selected = (sel.toString() || "").trim();
+  const base = String(currentText || "").trim();
+  return selected && selected.length >= base.length - 1;
+}
+
+function clearComposer() {
+  const editor = getComposer();
+  if (!editor) return;
+  editor.focus();
+  try {
+    const sel = window.getSelection && window.getSelection();
+    if (sel) {
+      sel.removeAllRanges();
+      const range = document.createRange();
+      range.selectNodeContents(editor);
+      sel.addRange(range);
+    }
+    document.execCommand("selectAll", false, null);
+    document.execCommand("delete", false, null);
+  } catch (e) {}
+  editor.innerHTML = "";
+
+  // Reforço: dispara eventos de backspace para que o React interno do WhatsApp reconheça limpeza
+  const backspaceDown = new KeyboardEvent("keydown", { key: "Backspace", code: "Backspace", keyCode: 8, which: 8, bubbles: true, cancelable: true });
+  const backspaceUp = new KeyboardEvent("keyup", { key: "Backspace", code: "Backspace", keyCode: 8, which: 8, bubbles: true, cancelable: true });
+  editor.dispatchEvent(backspaceDown);
+  editor.dispatchEvent(backspaceUp);
+
+  editor.dispatchEvent(new InputEvent("input", { bubbles: true, data: "", inputType: "deleteContentBackward" }));
+  editor.dispatchEvent(new Event("change", { bubbles: true }));
 }
 
 function generateDeviceId() {
@@ -213,11 +305,15 @@ function createPanel() {
   document.body.appendChild(panel);
 }
 
-function showPanel(text) {
+function showPanel(text, variant = "copilot") {
   const panel = document.getElementById(PANEL_ID);
   const p = document.getElementById("heroia-analysis-text");
+  const h3 = panel?.querySelector("h3");
   if (!panel || !p) return;
-  const body = text ? `${text}\n\n✍️ FollowUp sugerido GERADO 👉` : "";
+  panel.classList.toggle("heroia-panel-rewrite", variant === "rewrite");
+  if (h3) h3.textContent = variant === "rewrite" ? "🧠 HERO.IA Insights" : "🧠 HERO.IA Análise";
+  const suffix = variant === "rewrite" ? "" : "\n\n✍️ FollowUp sugerido GERADO 👉";
+  const body = text ? `${text}${suffix}` : "";
   p.textContent = body;
   panel.style.display = text ? "block" : "none";
 }
@@ -291,6 +387,53 @@ async function handleDraftClick() {
   if (state.loadingDraft) return;
   setLoading("loadingDraft", true);
   try {
+    const composerText = getComposerText();
+
+    if (composerText) {
+      const fullySelected = isComposerFullySelected(composerText);
+      if (fullySelected) {
+        clearComposer();
+      }
+      const rewriteInstruction = REWRITE_PROMPT.replace("<<<TEXTO_DO_RASCUNHO>>>", composerText);
+      const res = await callBackend("/whatsapp/copilot", {
+        messages: [
+          {
+            author: "cliente",
+            text: [
+              "Atue como copyeditor especializado em crédito imobiliário.",
+              "Reescreva e lapide o texto do corretor abaixo para ficar mais claro, consultivo e convincente.",
+              "Mantenha tom profissional e humano, sem saudação inicial.",
+              "Estruture com parágrafos curtos e uma lista de 4 bullets que cubra: teto de compra, parcela exata, uso de FGTS, estrutura de financiamento." ,
+              "Não invente dados; use apenas o que está no texto original.",
+              "Saída obrigatória: só o texto final pronto para WhatsApp, sem explicações meta, sem aspas.",
+              "Se houver menção de que o cliente já fez avaliação em banco, respeite e suavize o fechamento (opcional)."
+            ].join(" ")
+          },
+          { author: "corretor", text: rewriteInstruction }
+        ]
+      });
+
+      const refined = res?.suggestion?.trim() || res?.draft?.trim() || composerText;
+      const refinedFixed = fixCommonTypos(refined);
+      const analysis = res?.analysis?.trim() || buildRewriteInsights(refined) || REWRITE_INSIGHTS;
+
+      if (refinedFixed) {
+        navigator.clipboard?.writeText(refinedFixed).catch(() => {});
+        const appendMode = !fullySelected;
+        if (appendMode) {
+          const combined = `${composerText}\n\n\n${refinedFixed}`;
+          insertTextInComposer(combined, { append: false });
+        } else {
+          insertTextInComposer(refinedFixed, { append: false });
+        }
+      } else {
+        alert("Não foi possível lapidar o rascunho.");
+      }
+
+      showPanel(analysis, "rewrite");
+      return;
+    }
+
     const inbound = extractInboundMessages(3);
     if (!inbound.length) {
       alert("Não encontrei mensagens do cliente. Role o chat e tente de novo.");

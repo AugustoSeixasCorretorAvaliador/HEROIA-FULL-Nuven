@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "HERO.IA — Draft & Copiloto",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "HERO.IA - IA do Corretor gera rascunhos ou FollowUp de resposta com IA no WhatsApp Web, sem envio automático. Autor: Augusto Seixas Corretor de Imóveis - Creci-RJ-105921 # Especialista em TI",
   "author": "Augusto Seixas Corretor de Imóveis - Creci-RJ-105921 # Especialista em TI",
   "icons": {
