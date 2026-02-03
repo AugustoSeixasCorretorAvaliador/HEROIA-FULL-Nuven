@@ -7,7 +7,7 @@ const STORAGE_DEVICE = "heroia_device_id";
 const BTN_ID_DRAFT = "heroia-draft-btn";
 const BTN_ID_COPILOT = "heroia-copilot-btn";
 const LABEL_DRAFT = "✍️ HERO.IA\nGERAR Rascunho...";
-const LABEL_COPILOT = "🧠 HERO.IA\nCopiloto/Follow-UP";
+const LABEL_COPILOT = "🧠 HERO.IA\nCopiloto/<strong>🔄FU</strong>";
 const PANEL_ID = "heroia-analysis-panel";
 const TOOLBAR_ID = "heroia-toolbar";
 const REWRITE_PROMPT = "Sua tarefa é reescrever, lapidar e melhorar o texto abaixo.\nNão explique nada, não faça comentários, não adicione introduções.\nEntregue apenas a resposta final pronta para envio ao cliente.\nMantenha tom profissional, claro e estratégico, com linguagem adequada ao mercado imobiliário.\nNão cite empreendimentos, valores ou dados específicos, a menos que estejam explicitamente no texto original.\nTexto original: <<<TEXTO_DO_RASCUNHO>>>";
@@ -86,8 +86,8 @@ function createButton(id, label, className, onClick) {
   const btn = document.createElement("button");
   btn.id = id;
   btn.className = className;
-  btn.textContent = label;
-   btn.dataset.label = label;
+  btn.innerHTML = label;
+  btn.dataset.label = label;
   btn.addEventListener("click", onClick);
   return btn;
 }
@@ -388,11 +388,13 @@ function setLoading(mode, isLoading) {
   const btnCopilot = document.getElementById(BTN_ID_COPILOT);
   if (mode === "loadingDraft" && btnDraft) {
     btnDraft.disabled = isLoading;
-    btnDraft.textContent = isLoading ? "✍️ HERO.IA - Gerando..." : (btnDraft.dataset.label || LABEL_DRAFT);
+    const draftLabel = btnDraft.dataset.label || LABEL_DRAFT;
+    btnDraft[isLoading ? "textContent" : "innerHTML"] = isLoading ? "✍️ HERO.IA - Gerando..." : draftLabel;
   }
   if (mode === "loadingCopilot" && btnCopilot) {
     btnCopilot.disabled = isLoading;
-    btnCopilot.textContent = isLoading ? "🧠 HERO.IA - Analisando..." : (btnCopilot.dataset.label || LABEL_COPILOT);
+    const copilotLabel = btnCopilot.dataset.label || LABEL_COPILOT;
+    btnCopilot[isLoading ? "textContent" : "innerHTML"] = isLoading ? "🧠 HERO.IA - Analisando..." : copilotLabel;
   }
 }
 
