@@ -11,8 +11,8 @@
 .heroia-btn-draft,
 .heroia-btn-copilot {
   flex: 1;
-  max-width: 320px;
-  padding: 10px 14px;
+  max-width: 220px;
+  padding: 10px 12px;
   border: none;
   border-radius: 12px;
   font-size: 14px;
@@ -21,6 +21,9 @@
   cursor: pointer;
   box-shadow: 0 8px 20px rgba(0, 0, 0, 0.18);
   transition: transform 0.15s ease, box-shadow 0.15s ease, opacity 0.2s ease;
+  white-space: pre-line;
+  line-height: 1.2;
+  text-align: left;
 }
 
 .heroia-btn-draft {
@@ -29,6 +32,7 @@
 
 .heroia-btn-copilot {
   background: #7c3aed;
+  margin-left: -32px; /* desloca ~4 caracteres para a esquerda */
 }
 
 .heroia-btn-draft:hover,

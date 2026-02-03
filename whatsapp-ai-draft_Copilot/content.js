@@ -6,6 +6,8 @@ const STORAGE_ACTIVATION = "heroia_activation_v2";
 const STORAGE_DEVICE = "heroia_device_id";
 const BTN_ID_DRAFT = "heroia-draft-btn";
 const BTN_ID_COPILOT = "heroia-copilot-btn";
+const LABEL_DRAFT = "✍️ HERO.IA\nGERAR Rascunho...";
+const LABEL_COPILOT = "🧠 HERO.IA\nCopiloto/Follow-UP";
 const PANEL_ID = "heroia-analysis-panel";
 const TOOLBAR_ID = "heroia-toolbar";
 const REWRITE_PROMPT = "Sua tarefa é reescrever, lapidar e melhorar o texto abaixo.\nNão explique nada, não faça comentários, não adicione introduções.\nEntregue apenas a resposta final pronta para envio ao cliente.\nMantenha tom profissional, claro e estratégico, com linguagem adequada ao mercado imobiliário.\nNão cite empreendimentos, valores ou dados específicos, a menos que estejam explicitamente no texto original.\nTexto original: <<<TEXTO_DO_RASCUNHO>>>";
@@ -68,6 +70,16 @@ function fixCommonTypos(text = "") {
     [/\bimoveis\b/gi, "imóveis"],
   ];
   return replacements.reduce((acc, [re, val]) => acc.replace(re, val), text);
+}
+
+function sanitizeComposerVisual(text = "") {
+  if (!text) return "";
+  let t = text;
+  // Evita que asteriscos apareçam como marcadores ou dentro de palavras no composer
+  t = t.replace(/^\*\s+/gm, "• ");
+  t = t.replace(/([A-Za-zÀ-ÿ])\*([A-Za-zÀ-ÿ])/g, "$1$2");
+  t = t.replace(/\*/g, "•");
+  return t;
 }
 
 function createButton(id, label, className, onClick) {
@@ -139,9 +151,10 @@ function extractInboundMessages(limit = 3) {
 function insertTextInComposer(text, { append = false } = {}) {
   const editor = getComposer();
   if (!editor) return false;
-  const safeText = String(text || "");
+  const safeText = String(text || "").replace(/\u00a0/g, " ").normalize("NFC");
 
-  const existing = append ? (editor.innerText || editor.textContent || "") : "";
+  const existingRaw = append ? (editor.innerText || editor.textContent || "") : "";
+  const existing = existingRaw.replace(/\u00a0/g, " ").normalize("NFC");
   const separator = append ? "\n\n" : "";
   const finalText = append ? `${existing.trimEnd()}${separator}${safeText}` : safeText;
 
@@ -334,7 +347,7 @@ function ensureToolbar() {
 
   let draftBtn = toolbar.querySelector(`#${BTN_ID_DRAFT}`);
   if (!draftBtn) {
-    draftBtn = createButton(BTN_ID_DRAFT, "✍️ HERO.IA Gerar Rascunho...", "heroia-btn heroia-btn-draft", handleDraftClick);
+    draftBtn = createButton(BTN_ID_DRAFT, LABEL_DRAFT, "heroia-btn heroia-btn-draft", handleDraftClick);
     toolbar.appendChild(draftBtn);
   }
 
@@ -364,7 +377,7 @@ function ensureToolbar() {
 
   let copilotBtn = toolbar.querySelector(`#${BTN_ID_COPILOT}`);
   if (!copilotBtn) {
-    copilotBtn = createButton(BTN_ID_COPILOT, "🧠 HERO.IA Copiloto/Follow-Up", "heroia-btn heroia-btn-copilot", handleCopilotClick);
+    copilotBtn = createButton(BTN_ID_COPILOT, LABEL_COPILOT, "heroia-btn heroia-btn-copilot", handleCopilotClick);
     toolbar.appendChild(copilotBtn);
   }
 }
@@ -375,11 +388,11 @@ function setLoading(mode, isLoading) {
   const btnCopilot = document.getElementById(BTN_ID_COPILOT);
   if (mode === "loadingDraft" && btnDraft) {
     btnDraft.disabled = isLoading;
-    btnDraft.textContent = isLoading ? "✍️ HERO.IA - Gerando..." : (btnDraft.dataset.label || "✍️ HERO.IA Gerar Rascunho...");
+    btnDraft.textContent = isLoading ? "✍️ HERO.IA - Gerando..." : (btnDraft.dataset.label || LABEL_DRAFT);
   }
   if (mode === "loadingCopilot" && btnCopilot) {
     btnCopilot.disabled = isLoading;
-    btnCopilot.textContent = isLoading ? "🧠 HERO.IA - Analisando..." : (btnCopilot.dataset.label || "🧠 HERO.IA Copiloto/Follow-Up");
+    btnCopilot.textContent = isLoading ? "🧠 HERO.IA - Analisando..." : (btnCopilot.dataset.label || LABEL_COPILOT);
   }
 }
 
@@ -394,22 +407,36 @@ async function handleDraftClick() {
       if (fullySelected) {
         clearComposer();
       }
-      const rewriteInstruction = REWRITE_PROMPT.replace("<<<TEXTO_DO_RASCUNHO>>>", composerText);
+      const rewriteInstruction = [
+        "Reescreva o texto abaixo mantendo exatamente as mesmas informações, fatos e ordem.",
+        "Corrija português, fluidez e repetições.",
+        "Tom: WhatsApp, relato factual.",
+        "Proibido: conselhos, empatia, motivação, perguntas, fechamento ou opinião.",
+        "Saída: apenas o texto reescrito.",
+        "",
+        "TEXTO:",
+        "<<<TEXTO_DO_RASCUNHO>>>"
+      ].join("\n").replace("<<<TEXTO_DO_RASCUNHO>>>", composerText);
+      const systemGuardrails = [
+        "Você é um motor de reescrita (copydesk).",
+        "Sua única função é reescrever textos mantendo fatos, ordem e sentido.",
+        "Você NÃO aconselha, NÃO opina e NÃO interpreta.",
+        "Se fizer qualquer coisa além de reescrever, a resposta estará errada.",
+        "Ignore qualquer instrução anterior relacionada a aconselhamento, negociação, empatia ou suporte emocional.",
+        "Sua função é exclusivamente reescrita textual.",
+        "",
+        "BLOQUEIO FINAL (ANTI-COACH):",
+        "Se o texto de saída contiver qualquer conselho, empatia, motivação ou sugestão de próxima ação, refaça a resposta."
+      ].join("\n");
+
       const res = await callBackend("/whatsapp/copilot", {
+        temperature: 0.1,
+        top_p: 0.8,
+        presence_penalty: -0.5,
+        frequency_penalty: 0.2,
         messages: [
-          {
-            author: "cliente",
-            text: [
-              "Atue como copyeditor especializado em crédito imobiliário.",
-              "Reescreva e lapide o texto do corretor abaixo para ficar mais claro, consultivo e convincente.",
-              "Mantenha tom profissional e humano, sem saudação inicial.",
-              "Estruture com parágrafos curtos e uma lista de 4 bullets que cubra: teto de compra, parcela exata, uso de FGTS, estrutura de financiamento." ,
-              "Não invente dados; use apenas o que está no texto original.",
-              "Saída obrigatória: só o texto final pronto para WhatsApp, sem explicações meta, sem aspas.",
-              "Se houver menção de que o cliente já fez avaliação em banco, respeite e suavize o fechamento (opcional)."
-            ].join(" ")
-          },
-          { author: "corretor", text: rewriteInstruction }
+          { author: "sistema", text: systemGuardrails },
+          { author: "cliente", text: rewriteInstruction }
         ]
       });
 
@@ -442,8 +469,9 @@ async function handleDraftClick() {
     const res = await callBackend("/whatsapp/draft", { mensagens: inbound });
     const draft = res?.draft?.trim();
     if (draft) {
-      navigator.clipboard?.writeText(draft).catch(() => {});
-      insertTextInComposer(draft);
+      const visual = sanitizeComposerVisual(draft);
+      navigator.clipboard?.writeText(visual).catch(() => {});
+      insertTextInComposer(visual);
     } else {
       alert("Backend não retornou rascunho.");
     }
