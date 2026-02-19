@@ -239,7 +239,7 @@
     <div class="form-group">
       <label for="apiBase">URL do Backend</label>
       <input type="text" id="apiBase" placeholder="https://..." />
-      <p class="field-info">URL do servidor backend (deixe em branco para usar o padrão)</p>
+      <p class="field-info">URL do servidor backend (deixe em branco para usar o padrão = https://heroia-full-nuven-1.onrender.com)</p>
     </div>
 
     <div class="form-group">
@@ -386,7 +386,7 @@
   
   // Inicializa URL do backend
   const apiBaseInput = document.getElementById('apiBase');
-  const DEFAULT_API_BASE = 'http://localhost:3002'; // Mudado para localhost
+  const DEFAULT_API_BASE = 'https://heroia-full-nuven-1.onrender.com'; // Mudado para localhost
   const storedBase = localStorage.getItem('admin_api_base') || '';
   const initialBase = (storedBase || DEFAULT_API_BASE || '').replace(/\/$/, '');
   apiBaseInput.value = initialBase;
