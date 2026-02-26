@@ -147,6 +147,8 @@ button:disabled { opacity: 0.6; cursor: not-allowed; }
 
 #btn-draft { background: linear-gradient(135deg, #2d7df6, #1b5ecf); color: #f8fbff; }
 #btn-copilot { background: linear-gradient(135deg, #c37bff, #7c3aed); color: #fdf8ff; }
+#btn-refine { background: linear-gradient(135deg, #8b5a1a, #6f4510); color: #ffffff; }
+#btn-credito { background: linear-gradient(135deg, #0ea35c, #0b7c46); color: #ffffff; }
 #btn-clear, #btn-copy { background: #f4f7fb; color: #1d2a3a; border: 1px solid #d9e5f7; box-shadow: none; }
 
 .output {
