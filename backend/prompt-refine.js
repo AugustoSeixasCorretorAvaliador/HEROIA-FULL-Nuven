@@ -1,4 +1,4 @@
-export function buildrefineprompt({ mensagem }) {
+export function buildRefinePrompt({ mensagem }) {
   const system= `
 Você é um estrategista de comunicação profissional com pensamento analítico e visão de gestão.
 
