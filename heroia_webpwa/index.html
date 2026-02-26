@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="pt-BR">
 <head>
   <meta charset="UTF-8" />
@@ -52,6 +52,8 @@
       <div class="actions">
         <button id="btn-draft">✍️ HERO.IA Gerar Rascunho...</button>
         <button id="btn-copilot">🧠 HERO.IA Copiloto/Follow-Up</button>
+        <button id="btn-refine">📝 Refinar TXT</button>
+        <button id="btn-credito">💰 Crédito</button>
         <button id="btn-clear">Limpar</button>
       </div>
     </section>
@@ -81,8 +83,11 @@
     const suggestionEl = document.getElementById("suggestion");
     const btnCopilot = document.getElementById("btn-copilot");
     const btnDraft = document.getElementById("btn-draft");
+    const btnRefine = document.getElementById("btn-refine");
+    const btnCredito = document.getElementById("btn-credito");
     const btnCopy = document.getElementById("btn-copy");
     const btnClear = document.getElementById("btn-clear");
+    let creditoPrompted = false;
 
     const deviceIdEl = document.getElementById("device-id");
     const copyDeviceBtn = document.getElementById("copy-device");
@@ -162,7 +167,7 @@
     async function activateLicense(event) {
       event.preventDefault();
       const inputKey = licenseKeyInput.value.trim();
-      const license_key = (inputKey.includes("•") || inputKey.includes("*")) && licenseKeyInput.dataset.rawKey
+      const license_key = (inputKey.includes("â€¢") || inputKey.includes("*")) && licenseKeyInput.dataset.rawKey
         ? licenseKeyInput.dataset.rawKey
         : inputKey;
       const email = licenseEmailInput.value.trim();
@@ -227,6 +232,245 @@
         .filter(Boolean);
     }
 
+    function formatarBRL(valor) {
+      return new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL", maximumFractionDigits: 2 }).format(valor);
+    }
+
+        function normalizarNumero(texto) {
+      if (!texto) return null;
+      const lower = texto.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+      const numeroMatch = lower.match(/(\d[\d.,]*)/);
+      if (!numeroMatch) return null;
+      let numerico = numeroMatch[1];
+      let multiplicador = 1;
+      if (/(^|\s)milhao(s)?(\s|$)/.test(lower) || /(milh[ao]es)/.test(lower)) multiplicador = 1000000;
+      else if (/(^|\s)mil(\s|$)/.test(lower)) multiplicador = 1000;
+      numerico = numerico.replace(/\./g, "");
+      if (numerico.includes(",")) {
+        const partes = numerico.split(",");
+        numerico = `${partes.slice(0, -1).join("")}.${partes.slice(-1)}`;
+      }
+      const valor = parseFloat(numerico) * multiplicador;
+      return Number.isFinite(valor) ? valor : null;
+    }
+
+    function extrairDadosCredito(conversa) {
+      const linhas = conversa.split(/\n/);
+      const dados = { valor: null, entrada: null, fgts: 0, renda: null, prazo: null, sistema: "PRICE", hasSac: false, hasPrice: false };
+      linhas.forEach((linhaRaw) => {
+        if (!linhaRaw) return;
+        if (/^\s*\[?\d{1,2}:\d{2}/.test(linhaRaw)) return;
+        const linha = linhaRaw.trim();
+        const lower = linha.toLowerCase();
+        const entradaKeywords = ["entrada", "cash", "sinal", "entrada disponivel", "disponivel para entrada", "disponível para entrada"];
+        if (/im[oó]vel/.test(lower)) dados.valor = normalizarNumero(linha) ?? dados.valor;
+        if (entradaKeywords.some((k) => lower.includes(k))) dados.entrada = normalizarNumero(linha) ?? dados.entrada;
+        if (lower.includes("fgts")) {
+          const fgts = normalizarNumero(linha);
+          if (fgts !== null) dados.fgts = fgts;
+        }
+        if (lower.includes("renda")) dados.renda = normalizarNumero(linha) ?? dados.renda;
+        if (lower.includes("prazo")) dados.prazo = normalizarNumero(linha) ?? dados.prazo;
+        if (lower.includes("sac")) { dados.sistema = "SAC"; dados.hasSac = true; }
+        if (lower.includes("price")) { dados.sistema = "PRICE"; dados.hasPrice = true; }
+      });
+      if (dados.entrada === null) dados.entrada = 0;
+      if (dados.fgts === null) dados.fgts = 0;
+      if (dados.prazo !== null && dados.prazo > 100) {
+        dados.prazo = Math.round(dados.prazo / 12);
+      }
+      return dados;
+    }
+    function calcularPrice(pv, taxaAnual, meses) {
+      const i = taxaAnual / 12;
+      return pv * ((i * Math.pow(1 + i, meses)) / (Math.pow(1 + i, meses) - 1));
+    }
+
+    function calcularSAC(pv, taxaAnual, meses) {
+      const i = taxaAnual / 12;
+      const amortizacao = pv / meses;
+      const primeira = amortizacao + (pv * i);
+      const saldoFinal = amortizacao;
+      const ultima = amortizacao + (saldoFinal * i);
+      return { primeira, ultima };
+    }
+
+    function parcelaMaxima(renda) { return renda * 0.3; }
+
+    function encontrarPrazoIdeal(pv, renda, taxaAnual, sistema) {
+      const limite = parcelaMaxima(renda);
+      for (let anos = 10; anos <= 35; anos++) {
+        const meses = anos * 12;
+        const taxaMensal = taxaAnual / 12;
+        const parcela = sistema === "SAC"
+          ? (pv / meses) + (pv * taxaMensal)
+          : calcularPrice(pv, taxaAnual, meses);
+        if (parcela <= limite) return { anos, parcela };
+      }
+      return null;
+    }
+
+    function montarMensagemSolicitacao() {
+      return `💰 Vamos simular seu potencial de compra?
+
+Envie:
+
+• Valor do imóvel
+• Valor disponível para Entrada
+• Valor disponível FGTS
+• Renda bruta mensal
+• Prazo (anos) Desejado
+• Idade do titular (e do cônjuge, se houver)
+• Sistema: SAC ou PRICE`;
+    }
+
+    function montarResumoDados(dados, sistemas) {
+      const listaSistemas = sistemas.join(" / ");
+      return [
+        "Dados do solicitante :",
+        "",
+        `• Valor do imóvel: ${formatarBRL(dados.valor)}`,
+        `• Valor disponível para Entrada: ${formatarBRL(dados.entrada)}`,
+        `• Valor disponível FGTS: ${formatarBRL(dados.fgts || 0)}`,
+        `• Renda bruta mensal: ${formatarBRL(dados.renda)}`,
+        `• Prazo (anos) Desejado: ${dados.prazo} anos`,
+        `• Sistemas solicitados: ${listaSistemas}`
+      ].join("\n");
+    }
+
+    function montarBlocoSistema(sistema, parcela, comprometimento, financiado, ajuste, primeiraParcela, ultimaParcela, taxaAnual) {
+      let mensagem = `Valores da Simulação (${sistema}):
+
+Valor financiado: ${formatarBRL(financiado)}
+Taxa considerada: ${(taxaAnual * 100).toFixed(2)}% a.a.
+Parcela: ${formatarBRL(parcela)}
+1ª parcela estimada: ${formatarBRL(primeiraParcela)}
+Última parcela estimada: ${formatarBRL(ultimaParcela)}
+Comprometimento: ${comprometimento.toFixed(1)}%`;
+
+      if (ajuste) {
+        mensagem += `
+
+📌 Ajuste Estratégico (auto)
+Prazo ideal: ${ajuste.anos} anos
+Nova parcela: ${formatarBRL(ajuste.parcela)}`;
+      }
+      return mensagem;
+    }
+
+    const CHECKLIST_CREDITO = `💰 Vamos simular seu potencial de compra?
+
+Envie os DADOS abaixo e clique novamente no Botão Crédito:
+
+• Valor do imóvel
+• Valor disponível para Entrada
+• Valor disponível FGTS
+• Renda bruta mensal
+• Prazo (anos) Desejado
+• Idade do titular (e do cônjuge, se houver)
+• Sistema: SAC ou PRICE`;
+
+        async function runCredito() {
+      const TAXA_ANUAL = 0.095;
+      toggleLoading(true, btnCredito);
+      try {
+        if (!creditoPrompted) {
+          suggestionEl.textContent = CHECKLIST_CREDITO;
+          analysisEl.textContent = "Envie os dados acima e clique novamente em Credito.";
+          creditoPrompted = true;
+          return;
+        }
+
+        requireActiveLicense();
+        const conversa = messagesEl.value.trim();
+        if (!conversa) {
+          suggestionEl.textContent = CHECKLIST_CREDITO;
+          analysisEl.textContent = "Aguardando dados para simulacao.";
+          return;
+        }
+
+        const dados = extrairDadosCredito(conversa);
+        const camposOk = dados.valor !== null && dados.renda !== null && dados.prazo !== null;
+        if (!camposOk) {
+          suggestionEl.textContent = CHECKLIST_CREDITO;
+          analysisEl.textContent = "Dados incompletos - envie os dados e clique novamente em Credito.";
+          return;
+        }
+
+        const financiado = Math.max(0, (dados.valor || 0) - (dados.entrada || 0) - (dados.fgts || 0));
+        const meses = (dados.prazo || 0) * 12;
+        if (!financiado || financiado <= 0 || !meses || meses <= 0) {
+          suggestionEl.textContent = CHECKLIST_CREDITO;
+          analysisEl.textContent = "Valores invalidos - ajuste os dados e clique novamente.";
+          return;
+        }
+
+        const sistemas = [];
+        if (dados.hasSac) sistemas.push("SAC");
+        if (dados.hasPrice) sistemas.push("PRICE");
+        if (sistemas.length === 0) sistemas.push(dados.sistema || "PRICE");
+
+        const mensagens = sistemas.map((sistema) => {
+          const base = sistema === "SAC"
+            ? calcularSAC(financiado, TAXA_ANUAL, meses)
+            : { primeira: calcularPrice(financiado, TAXA_ANUAL, meses), ultima: calcularPrice(financiado, TAXA_ANUAL, meses) };
+
+          const primeiraParcela = base.primeira;
+          const ultimaParcela = base.ultima;
+          const parcela = primeiraParcela;
+          const comprometimento = (parcela / (dados.renda || 1)) * 100;
+          const precisaAjuste = parcela > parcelaMaxima(dados.renda || 0);
+          const ajuste = precisaAjuste ? encontrarPrazoIdeal(financiado, dados.renda, TAXA_ANUAL, sistema) : null;
+
+          return montarBlocoSistema(
+            sistema,
+            ajuste ? ajuste.parcela : parcela,
+            ajuste ? (ajuste.parcela / dados.renda) * 100 : comprometimento,
+            financiado,
+            ajuste,
+            primeiraParcela,
+            ultimaParcela,
+            TAXA_ANUAL
+          );
+        });
+
+        const cabecalho = "💰 Simulação estimada";
+        const resumo = montarResumoDados(dados, sistemas);
+        const corpo = mensagens.join("\n\n");
+        const aviso = "⚠️ Estimativa sujeita à análise do banco. Taxas e CET podem variar.";
+
+        const finalTexto = `${cabecalho}
+
+${resumo}
+
+${corpo}
+
+${aviso}`;
+        suggestionEl.textContent = finalTexto;
+        analysisEl.textContent = "Simulação gerada com base na conversa.";
+      } catch (err) {
+        analysisEl.textContent = "Erro ao gerar simulação de crédito";
+        renderActivation({ status: "error" }, err.message);
+        console.error(err);
+      } finally {
+        toggleLoading(false, btnCredito);
+      }
+    }
+    function buildRewriteInsights(text = "") {
+      const t = (text || "").toLowerCase();
+      const bullets = [];
+      if (t.includes("fgts") || t.includes("financi")) bullets.push("Mostra claramente como usar FGTS e financiar sem surpresa.");
+      if (t.includes("parcela") || t.includes("prest")) bullets.push("Entrega a parcela exata e o teto de compra, reduzindo insegurança.");
+      if (t.includes("document")) bullets.push("Lista documentos e passa seriedade no processo.");
+      if (t.includes("seguran") || t.includes("tranqui")) bullets.push("Reforça segurança e tranquilidade na decisão.");
+      if (!bullets.length) bullets.push("Texto lapidado para ficar claro, consultivo e sem pressão.");
+      return [
+        "Insights do texto lapidado:",
+        ...bullets.map((b) => `- ${b}`),
+        "Pronto para colar no WhatsApp."
+      ].join("\n");
+    }
+
     async function call(path, payload) {
       const activation = requireActiveLicense();
       const res = await fetch(`${API_BASE}${path}`, {
@@ -256,7 +500,7 @@
         }
         const res = await call("/whatsapp/copilot", { messages });
         const analysis = res.analysis || "";
-        analysisEl.textContent = analysis ? `${analysis}\n\n✍️ FollowUp sugerido GERADO 👉` : "";
+        analysisEl.textContent = analysis ? `${analysis}\n\nâœï¸ FollowUp sugerido GERADO ðŸ‘‰` : "";
         suggestionEl.textContent = res.suggestion || res.draft || "";
       } catch (err) {
         analysisEl.textContent = "Erro ao rodar Copiloto";
@@ -278,7 +522,7 @@
         }
         const res = await call("/whatsapp/draft", { message });
         const analysis = res.analysis || "";
-        analysisEl.textContent = analysis ? `${analysis}\n\n✍️ FollowUp sugerido GERADO 👉` : "";
+        analysisEl.textContent = analysis ? `${analysis}\n\nâœï¸ FollowUp sugerido GERADO ðŸ‘‰` : "";
         suggestionEl.textContent = res.suggestion || res.draft || "";
       } catch (err) {
         analysisEl.textContent = "Erro ao gerar rascunho";
@@ -289,12 +533,37 @@
       }
     }
 
+    async function runRefine() {
+      toggleLoading(true, btnRefine);
+      try {
+        requireActiveLicense();
+        const message = messagesEl.value.trim();
+        if (!message) {
+          alert("Digite ou cole um texto antes de refinar.");
+          return;
+        }
+        const res = await call("/whatsapp/refine", { mensagem: message });
+        const refined = res.refined?.trim() || message;
+        suggestionEl.textContent = refined;
+        const analysis = res.analysis || buildRewriteInsights(refined);
+        analysisEl.textContent = analysis;
+      } catch (err) {
+        analysisEl.textContent = "Erro ao refinar";
+        renderActivation({ status: "error" }, err.message);
+        console.error(err);
+      } finally {
+        toggleLoading(false, btnRefine);
+      }
+    }
+
     function toggleLoading(isLoading, btn) {
       if (!btn) return;
       btn.disabled = isLoading;
       if (isLoading) {
         if (btn.id === "btn-draft") btn.textContent = "✍️ HERO.IA - Gerando...";
         else if (btn.id === "btn-copilot") btn.textContent = "🧠 HERO.IA - Analisando...";
+        else if (btn.id === "btn-refine") btn.textContent = "📝 Refinando...";
+        else if (btn.id === "btn-credito") btn.textContent = "Simulando...";
         else btn.textContent = "Carregando...";
       } else {
         btn.textContent = btn.dataset.label || btn.textContent;
@@ -303,6 +572,8 @@
 
     btnCopilot.dataset.label = btnCopilot.textContent;
     btnDraft.dataset.label = btnDraft.textContent;
+    btnRefine.dataset.label = btnRefine.textContent;
+    btnCredito.dataset.label = btnCredito.textContent;
 
     const existing = loadActivation();
     if (existing) {
@@ -325,6 +596,8 @@
 
     btnCopilot.addEventListener("click", runCopilot);
     btnDraft.addEventListener("click", runDraft);
+    btnRefine.addEventListener("click", runRefine);
+    btnCredito.addEventListener("click", runCredito);
     btnCopy.addEventListener("click", () => {
       const text = suggestionEl.textContent || "";
       navigator.clipboard?.writeText(text).catch(() => {});
@@ -337,3 +610,15 @@
   </script>
 </body>
 </html>
+
+
+
+
+
+
+
+
+
+
+
+
